@@ -21,7 +21,7 @@ import { dataService } from './services/dataService.ts';
 
 // --- CONFIGURACIÓN DE CONEXIÓN ---
 // 1. Reemplaza esta URL con la que obtienes al "Implementar" en Google Apps Script
-export const GAS_API_URL = "https://script.google.com/macros/s/AKfycbzmMtb59HSwUlX9fm5rUw8_MoDm4JjVviBoSoVF1AVsxv6XWa4wXLdJVY9auRgeoyjDVw/exec";
+export const GAS_API_URL = "https://script.google.com/macros/s/AKfycbzTUE7hJMazOJQXOeF0OoOHdauxZi-l7rSJtJHN9B9fL9upxhXnZsw4Obq1YFv6Dn1pLw/exec";
 
 const NavItem: React.FC<{ to: string, icon: React.ReactNode, label: string }> = ({ to, icon, label }) => {
   const location = useLocation();
