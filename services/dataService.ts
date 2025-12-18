@@ -1,6 +1,6 @@
 import { Product, InputTransaction, OutputTransaction, DailyClosing, PriceHistory, PurchaseNote, Envelope, EnvelopeWithdrawal } from "../types";
 
-const GAS_API_URL = "https://script.google.com/macros/s/AKfycbzmMtb59HSwUlX9fm5rUw8_MoDm4JjVviBoSoVF1AVsxv6XWa4wXLdJVY9auRgeoyjDVw/exec";
+const GAS_API_URL = "https://script.google.com/macros/s/AKfycbzTUE7hJMazOJQXOeF0OoOHdauxZi-l7rSJtJHN9B9fL9upxhXnZsw4Obq1YFv6Dn1pLw/exec";
 
 const isGasEnv = () => {
   const g = (window as any).google;
