@@ -1,0 +1,7 @@
+{
+  "name": "tiendita - Gestión de Inventario y Sobres",
+  "description": "Sistema de gestión para tiendita con control de sobres de utilidad y salidas por inventario físico.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
