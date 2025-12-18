@@ -1,32 +1,54 @@
-import { Product, InputTransaction, OutputTransaction, DailyClosing, PriceHistory, PurchaseNote, Envelope, EnvelopeWithdrawal } from "../types";
 
-const GAS_API_URL = "https://script.google.com/macros/s/AKfycbzTUE7hJMazOJQXOeF0OoOHdauxZi-l7rSJtJHN9B9fL9upxhXnZsw4Obq1YFv6Dn1pLw/exec";
+import { Product, InputTransaction, OutputTransaction, DailyClosing, PriceHistory, PurchaseNote, Envelope, EnvelopeWithdrawal } from "../types";
 
 const isGasEnv = () => {
   const g = (window as any).google;
   return typeof g !== 'undefined' && g.script && g.script.run;
 };
 
-const runGas = async (functionName: string, ...args: any[]): Promise<any> => {
+const runGas = (functionName: string, ...args: any[]): Promise<any> => {
+  const google = (window as any).google;
   if (isGasEnv()) {
     return new Promise((resolve, reject) => {
-      (window as any).google.script.run
+      google.script.run
         .withSuccessHandler(resolve)
         .withFailureHandler(reject)[functionName](...args);
     });
   } else {
-    // Versión original: Fetch directo (Puede requerir configuración CORS en el servidor)
-    const url = `${GAS_API_URL}?action=${functionName}`;
-    if (functionName.startsWith('get')) {
-      const response = await fetch(url);
-      return await response.json();
-    } else {
-      const response = await fetch(url, {
-        method: 'POST',
-        body: JSON.stringify(args[0] || {})
-      });
-      return await response.json();
-    }
+    return mockHandler(functionName, args);
+  }
+};
+
+const mockHandler = async (fn: string, args: any[]): Promise<any> => {
+  const getStorage = (key: string) => JSON.parse(localStorage.getItem(key) || '[]');
+  const setStorage = (key: string, data: any) => localStorage.setItem(key, JSON.stringify(data));
+
+  switch (fn) {
+    case 'getProducts': return getStorage('zenith_products');
+    case 'getDashboardData':
+      const envs = getStorage('zenith_envelopes');
+      return {
+        envelopes: envs.length ? envs : [
+          { id: "ENV1", name: "Sobre 1 - Operativo", balance: 150.5, description: "1/3 Utilidad", lastResetDate: new Date().toISOString() },
+          { id: "ENV2", name: "Sobre 2 - Ahorro", balance: 150.5, description: "1/3 Utilidad", lastResetDate: new Date().toISOString() },
+          { id: "ENV3", name: "Sobre 3 - Ganancia", balance: 150.5, description: "1/3 Utilidad", lastResetDate: new Date().toISOString() },
+          { id: "ENV4", name: "Sobre 4 - Capital", balance: 4500, description: "Fondo Resurtido", lastResetDate: new Date().toISOString() }
+        ],
+        profitVsCapital: [{name: 'Utilidad', value: 450}, {name: 'Capital', value: 4500}],
+        topVolume: [{name: 'Coca Cola', volume: 10}],
+        topProfit: [{name: 'Coca Cola', profit: 50}]
+      };
+    case 'getEnvelopes': return getStorage('zenith_envelopes');
+    case 'getEnvelopeHistory': return getStorage('zenith_envelope_history');
+    case 'getPurchaseNotes': return getStorage('zenith_purchase_notes');
+    case 'getOutputs': return getStorage('zenith_outputs');
+    case 'getInputs': return getStorage('zenith_inputs');
+    case 'getClosings': return getStorage('zenith_closings');
+    case 'getPriceHistory': return getStorage('zenith_price_history');
+    case 'processPhysicalCount': return { totalSold: 100, netProfit: 30, totalCOGS: 70 };
+    case 'withdrawEnvelope': return true;
+    case 'setupSheet': return "Sheet Setup Done";
+    default: return null;
   }
 };
 
@@ -42,7 +64,7 @@ export const dataService = {
 
   async fetchAll() {
     try {
-      const [p, e, eh, pn, i, o, c, ph] = await Promise.all([
+      const [products, envelopes, envHistory, purchaseNotes, inputs, outputs, closings, priceHistory] = await Promise.all([
         runGas('getProducts'),
         runGas('getEnvelopes'),
         runGas('getEnvelopeHistory'),
@@ -50,20 +72,17 @@ export const dataService = {
         runGas('getInputs'),
         runGas('getOutputs'),
         runGas('getClosings'),
-        runGas('getPriceHistory')
+        runGas('getPriceHistory'),
       ]);
-      
-      this._products = Array.isArray(p) ? p : [];
-      this._envelopes = Array.isArray(e) ? e : [];
-      this._envelopeHistory = Array.isArray(eh) ? eh : [];
-      this._purchaseNotes = Array.isArray(pn) ? pn : [];
-      this._inputs = Array.isArray(i) ? i : [];
-      this._outputs = Array.isArray(o) ? o : [];
-      this._closings = Array.isArray(c) ? c : [];
-      this._priceHistory = Array.isArray(ph) ? ph : [];
-    } catch (err) {
-      console.error("Error en sincronización masiva");
-    }
+      this._products = products || [];
+      this._envelopes = envelopes || [];
+      this._envelopeHistory = envHistory || [];
+      this._purchaseNotes = purchaseNotes || [];
+      this._inputs = inputs || [];
+      this._outputs = outputs || [];
+      this._closings = closings || [];
+      this._priceHistory = priceHistory || [];
+    } catch (e) { console.error(e); }
   },
 
   getProducts() { return this._products; },
@@ -75,9 +94,7 @@ export const dataService = {
   getClosings() { return this._closings; },
   getPriceHistory() { return this._priceHistory; },
   
-  async getDashboardData() { 
-    return await runGas('getDashboardData');
-  },
+  async getDashboardData() { return await runGas('getDashboardData'); },
   
   async withdrawEnvelope(withdrawal: EnvelopeWithdrawal) {
     await runGas('withdrawEnvelope', withdrawal);
@@ -85,7 +102,7 @@ export const dataService = {
   },
 
   async processPhysicalCount(counts: any[], shift: string) {
-    const res = await runGas('processPhysicalCount', { counts, shift });
+    const res = await runGas('processPhysicalCount', counts, shift);
     await this.fetchAll();
     return res;
   },
@@ -96,12 +113,12 @@ export const dataService = {
   },
 
   async updateNoteStatus(id: string, status: string) {
-    await runGas('updateNoteStatus', { id, status });
+    await runGas('updateNoteStatus', id, status);
     await this.fetchAll();
   },
 
   async saveProduct(p: Product) { await runGas('saveProduct', p); await this.fetchAll(); },
-  async deleteProduct(id: string) { await runGas('deleteProduct', { id }); await this.fetchAll(); },
+  async deleteProduct(id: string) { await runGas('deleteProduct', id); await this.fetchAll(); },
   
   async saveOutput(o: OutputTransaction) {
     await runGas('saveOutput', o);
