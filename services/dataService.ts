@@ -1,22 +1,26 @@
-
 import { Product, InputTransaction, OutputTransaction, DailyClosing, PriceHistory, PurchaseNote, Envelope, EnvelopeWithdrawal } from "../types";
 
-// La URL se obtiene de las variables de entorno de Vite/Vercel
-const APPS_SCRIPT_URL = (import.meta as any).env.VITE_APPS_SCRIPT_URL;
+// URL proporcionada por el usuario para la persistencia real en Google Sheets
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzTUE7hJMazOJQXOeF0OoOHdauxZi-l7rSJtJHN9B9fL9upxhXnZsw4Obq1YFv6Dn1pLw/exec";
 
 const callApi = async (action: string, data: any = null) => {
   if (!APPS_SCRIPT_URL) {
-    console.error("VITE_APPS_SCRIPT_URL no está configurada.");
+    console.error("URL de Google Apps Script no configurada.");
     return null;
   }
 
   try {
     const response = await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
-      mode: 'cors', // Crucial para Vercel
-      headers: { 'Content-Type': 'text/plain' }, // Apps Script prefiere text/plain para evitar pre-flight CORS
+      mode: 'cors',
+      headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify({ action, data })
     });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
     return await response.json();
   } catch (error) {
     console.error(`Error en API (${action}):`, error);
