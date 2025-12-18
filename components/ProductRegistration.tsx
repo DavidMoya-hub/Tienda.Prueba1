@@ -1,9 +1,8 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Camera, Check, AlertCircle, Loader2, ArrowLeft } from 'lucide-react';
-import { processTicketWithGemini } from '../services/geminiService.ts';
-import { dataService } from '../services/dataService.ts';
+import { processTicketWithGemini } from '../services/geminiService';
+import { dataService } from '../services/dataService';
 
 const ProductRegistration: React.FC = () => {
   const location = useLocation();

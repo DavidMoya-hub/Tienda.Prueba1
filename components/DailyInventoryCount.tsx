@@ -1,7 +1,6 @@
-
 import React, { useState, useMemo } from 'react';
 import { Save, Calculator, CheckCircle2, Wallet, ArrowRight, RefreshCcw, Search, AlertCircle, Store } from 'lucide-react';
-import { dataService } from '../services/dataService.ts';
+import { dataService } from '../services/dataService';
 
 const DailyInventoryCount: React.FC = () => {
   const products = dataService.getProducts();

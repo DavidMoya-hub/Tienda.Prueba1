@@ -1,8 +1,7 @@
-
 import React, { useState } from 'react';
 import { Search, Filter, Download, Edit2, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { dataService } from '../services/dataService.ts';
+import { dataService } from '../services/dataService';
 
 const Inventory: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');

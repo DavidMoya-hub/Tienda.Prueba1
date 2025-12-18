@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { HashRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { 
@@ -6,15 +5,15 @@ import {
   RefreshCcw, ClipboardCheck, Wallet, Store,
   Coins, Tag
 } from 'lucide-react';
-import Dashboard from './components/Dashboard.tsx';
-import Inventory from './components/Inventory.tsx';
-import ProductRegistration from './components/ProductRegistration.tsx';
-import Restock from './components/Restock.tsx';
-import DailyInventoryCount from './components/DailyInventoryCount.tsx';
-import HistoryView from './components/HistoryView.tsx';
-import EnvelopesManager from './components/EnvelopesManager.tsx';
-import DailyClosingView from './components/DailyClosingView.tsx';
-import { dataService } from './services/dataService.ts';
+import Dashboard from './components/Dashboard';
+import Inventory from './components/Inventory';
+import ProductRegistration from './components/ProductRegistration';
+import Restock from './components/Restock';
+import DailyInventoryCount from './components/DailyInventoryCount';
+import HistoryView from './components/HistoryView';
+import EnvelopesManager from './components/EnvelopesManager';
+import DailyClosingView from './components/DailyClosingView';
+import { dataService } from './services/dataService';
 
 const NavItem: React.FC<{ to: string, icon: React.ReactNode, label: string }> = ({ to, icon, label }) => {
   const location = useLocation();

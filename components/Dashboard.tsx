@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -6,7 +5,7 @@ import {
   PieChart, Pie, Cell 
 } from 'recharts';
 import { Wallet, PiggyBank, ArrowRight, TrendingUp, ShoppingBag, DollarSign, RefreshCw, Store } from 'lucide-react';
-import { dataService } from '../services/dataService.ts';
+import { dataService } from '../services/dataService';
 
 const PIE_COLORS = ['#dc2626', '#2563eb']; // Red-600 and Blue-600
 

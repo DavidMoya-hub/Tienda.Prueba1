@@ -1,9 +1,8 @@
-
 import React, { useState, useRef, useMemo } from 'react';
 import { ShoppingCart, Search, Trash2, Camera, Banknote, CheckCircle2, Package, Tag, Calculator } from 'lucide-react';
-import { dataService } from '../services/dataService.ts';
-import { processTicketWithGemini } from '../services/geminiService.ts';
-import { Product, PurchaseNote } from '../types.ts';
+import { dataService } from '../services/dataService';
+import { processTicketWithGemini } from '../services/geminiService';
+import { Product, PurchaseNote } from '../types';
 
 const Restock: React.FC = () => {
   const [cart, setCart] = useState<any[]>([]);

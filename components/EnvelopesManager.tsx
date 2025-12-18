@@ -1,8 +1,7 @@
-
 import React, { useState } from 'react';
-import { dataService } from '../services/dataService.ts';
+import { dataService } from '../services/dataService';
 import { Wallet, ArrowUpRight, Clock, Calendar, Coins, History } from 'lucide-react';
-import { Envelope, EnvelopeWithdrawal } from '../types.ts';
+import { Envelope, EnvelopeWithdrawal } from '../types';
 
 const calculateDuration = (start: string, end: string) => {
   const s = new Date(start);

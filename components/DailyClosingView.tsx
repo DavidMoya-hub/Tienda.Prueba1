@@ -1,7 +1,6 @@
-
 import React, { useState, useMemo } from 'react';
 import { DollarSign, Tag, Calculator, Save, Check, ArrowRightCircle, CreditCard, Wallet } from 'lucide-react';
-import { dataService } from '../services/dataService.ts';
+import { dataService } from '../services/dataService';
 
 const DailyClosingView: React.FC = () => {
   const products = dataService.getProducts();

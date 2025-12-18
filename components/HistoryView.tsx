@@ -1,7 +1,6 @@
-
 import React, { useState, useMemo } from 'react';
 import { Calendar, ArrowUpCircle, ArrowDownCircle, Search, ClipboardList, Wallet, CheckCircle, Clock, AlertCircle } from 'lucide-react';
-import { dataService } from '../services/dataService.ts';
+import { dataService } from '../services/dataService';
 
 const HistoryView: React.FC = () => {
   const [tab, setTab] = useState<'Inputs' | 'Outputs' | 'Audit' | 'Debts'>('Inputs');
