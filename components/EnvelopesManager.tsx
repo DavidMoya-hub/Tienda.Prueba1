@@ -263,7 +263,7 @@ const EnvelopesManager: React.FC = () => {
                 <label className="text-[10px] font-black text-blue-900 uppercase tracking-widest px-1">Nombre del Sobre</label>
                 <input 
                   required
-                  disabled={editingEnv && isCoreEnvelope(editingEnv.id)}
+                  disabled={!!(editingEnv && isCoreEnvelope(editingEnv.id))}
                   value={formData.name}
                   onChange={(e) => setFormData({...formData, name: e.target.value})}
                   className="w-full p-5 bg-slate-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-blue-500 focus:outline-none transition-all font-black text-slate-800 disabled:opacity-50"
