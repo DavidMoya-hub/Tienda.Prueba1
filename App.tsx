@@ -1,9 +1,10 @@
+
 import React, { useState, useEffect } from 'react';
 import { HashRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, Package, PlusCircle, History, 
   RefreshCcw, ClipboardCheck, Wallet, Store,
-  Coins, Tag
+  Coins, List
 } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import Inventory from './components/Inventory';
@@ -12,7 +13,7 @@ import Restock from './components/Restock';
 import DailyInventoryCount from './components/DailyInventoryCount';
 import HistoryView from './components/HistoryView';
 import EnvelopesManager from './components/EnvelopesManager';
-import DailyClosingView from './components/DailyClosingView';
+import ProductsTable from './components/ProductsTable';
 import { dataService } from './services/dataService';
 
 const NavItem: React.FC<{ to: string, icon: React.ReactNode, label: string }> = ({ to, icon, label }) => {
@@ -45,7 +46,7 @@ const Sidebar: React.FC = () => (
     </div>
     <nav className="flex-1 p-5 space-y-2 overflow-y-auto custom-scrollbar">
       <NavItem to="/" icon={<LayoutDashboard size={20} />} label="Dashboard" />
-      <NavItem to="/closing" icon={<Tag size={20} />} label="Corte de Caja" />
+      <NavItem to="/products" icon={<List size={20} />} label="Productos" />
       <NavItem to="/count" icon={<ClipboardCheck size={20} />} label="Inventario Físico" />
       <NavItem to="/envelopes" icon={<Coins size={20} />} label="Sobres" />
       <NavItem to="/inventory" icon={<Package size={20} />} label="Inventario" />
@@ -102,7 +103,7 @@ const App: React.FC = () => {
           <div className="p-8 max-w-7xl mx-auto">
             <Routes>
               <Route path="/" element={<Dashboard />} />
-              <Route path="/closing" element={<DailyClosingView />} />
+              <Route path="/products" element={<ProductsTable />} />
               <Route path="/count" element={<DailyInventoryCount />} />
               <Route path="/envelopes" element={<EnvelopesManager />} />
               <Route path="/inventory" element={<Inventory />} />

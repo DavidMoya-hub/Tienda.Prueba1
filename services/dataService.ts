@@ -1,3 +1,4 @@
+
 import { Product, InputTransaction, OutputTransaction, DailyClosing, PriceHistory, PurchaseNote, Envelope, EnvelopeWithdrawal } from "../types";
 
 // URL proporcionada por el usuario para la persistencia real en Google Sheets
@@ -106,6 +107,18 @@ export const dataService = {
   async deleteProduct(id: string) { 
     await callApi('deleteProduct', id); 
     await this.fetchAll(); 
+  },
+
+  // Added missing method saveEnvelope to handle envelope updates and creation
+  async saveEnvelope(e: Envelope) {
+    await callApi('saveEnvelope', e);
+    await this.fetchAll();
+  },
+
+  // Added missing method deleteEnvelope to handle envelope deletion
+  async deleteEnvelope(id: string) {
+    await callApi('deleteEnvelope', id);
+    await this.fetchAll();
   },
   
   async saveOutput(o: OutputTransaction) {

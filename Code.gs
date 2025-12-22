@@ -1,7 +1,8 @@
 
 /**
- * tiendita - Backend API v2.5
- * Maneja persistencia real en Google Sheets desde dominios externos (Vercel)
+ * tiendita - Backend API v3.6
+ * Maneja persistencia real en Google Sheets con soporte para acumulados de entradas/salidas
+ * Se elimina el acceso directo a saveClosing desde la API manual de UI.
  */
 
 function doPost(e) {
@@ -16,13 +17,12 @@ function doPost(e) {
       case 'getEnvelopes': result = getEnvelopes(); break;
       case 'getDashboardData': result = getDashboardData(); break;
       case 'saveProduct': result = saveProduct(data); break;
+      case 'saveEnvelope': result = saveProduct(data); break; // Usado para guardar sobres también
       case 'deleteProduct': result = deleteProduct(data); break;
       case 'saveRestockNote': result = saveRestockNote(data); break;
       case 'updateNoteStatus': result = updateNoteStatus(data.id, data.status); break;
       case 'processPhysicalCount': result = processPhysicalCount(data.counts, data.shift); break;
       case 'withdrawEnvelope': result = withdrawEnvelope(data); break;
-      case 'saveOutput': result = saveOutput(data); break;
-      case 'saveClosing': result = saveClosing(data); break;
       case 'getEnvelopeHistory': result = getSheetData("EnvelopeHistory"); break;
       case 'getPurchaseNotes': result = getSheetData("PurchaseNotes"); break;
       case 'getInputs': result = getSheetData("Inputs"); break;
@@ -41,7 +41,6 @@ function doPost(e) {
   }
 }
 
-// Funciones de utilidad para Sheets
 function getSheet(name) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName(name);
@@ -84,7 +83,12 @@ function saveProduct(p) {
     }
   }
   
-  const row = [p.id, p.code, p.name, p.grams, p.flavor, p.costPrice, p.salePrice, p.stock, p.category, p.provider, p.totalInvested, p.totalEarned];
+  const row = [
+    p.id, p.code || "", p.name, p.grams || "", p.flavor || "", 
+    p.costPrice || 0, p.salePrice || 0, p.stock || 0, p.category || "", 
+    p.provider || "", p.totalInvested || 0, p.totalEarned || 0,
+    p.totalInputs || 0, p.totalOutputs || 0
+  ];
   
   if(foundIndex > -1) {
     sheet.getRange(foundIndex, 1, 1, row.length).setValues([row]);
@@ -114,6 +118,8 @@ function saveRestockNote(note) {
   const inputSheet = getSheet("Inputs");
   const productSheet = getSheet("Products");
   const productData = productSheet.getDataRange().getValues();
+  const headers = productData[0];
+  const inputCol = headers.indexOf("totalInputs") + 1;
   
   details.forEach(item => {
     inputSheet.appendRow([
@@ -121,14 +127,16 @@ function saveRestockNote(note) {
       item.unitCost, item.totalCost, note.date, note.provider
     ]);
     
-    // Actualizar Stock y Costo en Products
     for(let i=1; i<productData.length; i++) {
       if(productData[i][0] === item.productId) {
         let currentStock = Number(productData[i][7]);
         let currentInvested = Number(productData[i][10]);
+        let currentInputs = Number(productData[i][inputCol - 1] || 0);
+        
         productSheet.getRange(i+1, 8).setValue(currentStock + item.quantity);
         productSheet.getRange(i+1, 6).setValue(item.unitCost);
         productSheet.getRange(i+1, 11).setValue(currentInvested + item.totalCost);
+        if(inputCol > 0) productSheet.getRange(i+1, inputCol).setValue(currentInputs + item.quantity);
       }
     }
   });
@@ -140,25 +148,12 @@ function saveRestockNote(note) {
   return {success: true};
 }
 
-function updateNoteStatus(id, status) {
-  const sheet = getSheet("PurchaseNotes");
-  const data = sheet.getDataRange().getValues();
-  for(let i=1; i<data.length; i++) {
-    if(data[i][0] === id) {
-      sheet.getRange(i+1, 5).setValue(status);
-      if(status === 'Paid') {
-        updateEnvelopeBalance("ENV4", -Number(data[i][3]));
-      }
-      break;
-    }
-  }
-  return {success: true};
-}
-
 function processPhysicalCount(counts, shift) {
   const productSheet = getSheet("Products");
   const outputSheet = getSheet("Outputs");
   const productData = productSheet.getDataRange().getValues();
+  const headers = productData[0];
+  const outputCol = headers.indexOf("totalOutputs") + 1;
   const date = new Date().toISOString();
   
   let totalSold = 0;
@@ -184,10 +179,14 @@ function processPhysicalCount(counts, shift) {
             diff, salePrice, totalSale, date, shift
           ]);
           
-          // Update product earned and stock
           productSheet.getRange(i+1, 8).setValue(count.physicalCount);
           let currentEarned = Number(productData[i][11]);
           productSheet.getRange(i+1, 12).setValue(currentEarned + totalSale);
+          
+          if(outputCol > 0) {
+            let currentOutputs = Number(productData[i][outputCol - 1] || 0);
+            productSheet.getRange(i+1, outputCol).setValue(currentOutputs + diff);
+          }
         }
       }
     }
@@ -196,7 +195,6 @@ function processPhysicalCount(counts, shift) {
   const netProfit = totalSold - totalCOGS;
   saveClosing({id: Utilities.getUuid(), date, totalSold, netProfit, cogs: totalCOGS});
 
-  // Distribuir utilidades
   const profitPerEnv = netProfit / 3;
   updateEnvelopeBalance("ENV1", profitPerEnv);
   updateEnvelopeBalance("ENV2", profitPerEnv);
@@ -204,6 +202,11 @@ function processPhysicalCount(counts, shift) {
   updateEnvelopeBalance("ENV4", totalCOGS);
 
   return { totalSold, netProfit, totalCOGS };
+}
+
+function saveClosing(c) {
+  const sheet = getSheet("Closings");
+  sheet.appendRow([c.id, c.date, c.totalSold, c.netProfit, c.cogs]);
 }
 
 function updateEnvelopeBalance(id, amount) {
@@ -222,59 +225,21 @@ function withdrawEnvelope(w) {
   const sheet = getSheet("Envelopes");
   const histSheet = getSheet("EnvelopeHistory");
   const data = sheet.getDataRange().getValues();
-  
-  for(let i=1; i<data.length; i++) {
-    if(data[i][0] === w.envelopeId) {
-      sheet.getRange(i+1, 3).setValue(0);
+  for(let i=1; i<data.length; i++) { 
+    if(data[i][0] === w.envelopeId) { 
+      sheet.getRange(i+1, 3).setValue(0); 
       sheet.getRange(i+1, 5).setValue(new Date().toISOString());
-      break;
-    }
+      break; 
+    } 
   }
-  
   histSheet.appendRow([w.id, w.envelopeId, w.envelopeName, w.amount, w.startDate, w.endDate, w.durationText, w.notes]);
   return {success: true};
-}
-
-function saveClosing(c) {
-  const sheet = getSheet("Closings");
-  sheet.appendRow([c.id, c.date, c.totalSold, c.netProfit, c.cogs]);
-  return {success: true};
-}
-
-function saveOutput(o) {
-  const sheet = getSheet("Outputs");
-  sheet.appendRow([o.id, o.productId, o.productName, o.quantity, o.salePrice, o.totalSale, o.date, o.shift]);
-  return {success: true};
-}
-
-function getDashboardData() {
-  const envs = getEnvelopes();
-  const products = getProducts();
-  const closings = getSheetData("Closings");
-  
-  let totalProfit = 0;
-  let totalCapital = 0;
-  
-  envs.forEach(e => {
-    if(e.id === "ENV4") totalCapital = e.balance;
-    else totalProfit += e.balance;
-  });
-
-  return {
-    envelopes: envs,
-    profitVsCapital: [
-      {name: 'Utilidad Acum.', value: totalProfit},
-      {name: 'Capital Stock', value: totalCapital}
-    ],
-    topVolume: products.sort((a,b) => b.totalEarned - a.totalEarned).slice(0, 5).map(p => ({name: p.name, volume: p.totalEarned / (p.salePrice || 1)})),
-    topProfit: products.sort((a,b) => b.totalEarned - a.totalEarned).slice(0, 5).map(p => ({name: p.name, profit: p.totalEarned}))
-  };
 }
 
 function setupSheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheets = {
-    "Products": ["id", "code", "name", "grams", "flavor", "costPrice", "salePrice", "stock", "category", "provider", "totalInvested", "totalEarned"],
+    "Products": ["id", "code", "name", "grams", "flavor", "costPrice", "salePrice", "stock", "category", "provider", "totalInvested", "totalEarned", "totalInputs", "totalOutputs"],
     "Envelopes": ["id", "name", "balance", "description", "lastResetDate"],
     "EnvelopeHistory": ["id", "envelopeId", "envelopeName", "amount", "startDate", "endDate", "durationText", "notes"],
     "PurchaseNotes": ["id", "date", "provider", "totalAmount", "status", "detailsJson"],

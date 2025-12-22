@@ -12,6 +12,8 @@ export interface Product {
   provider: string;
   totalInvested: number;
   totalEarned: number;
+  totalInputs: number; // Nuevo: Acumulado de entradas
+  totalOutputs: number; // Nuevo: Acumulado de salidas
 }
 
 export interface Envelope {
@@ -19,7 +21,7 @@ export interface Envelope {
   name: string;
   balance: number;
   description: string;
-  lastResetDate: string; // Nueva: Para calcular tiempo de acumulación
+  lastResetDate: string; 
 }
 
 export interface EnvelopeWithdrawal {

@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Camera, Check, AlertCircle, Loader2, ArrowLeft } from 'lucide-react';
@@ -86,6 +87,7 @@ const ProductRegistration: React.FC = () => {
     try {
       const existingProduct = editMode ? dataService.getProducts().find(p => p.id === formData.id) : null;
       
+      // Fix: Ensure all properties required by Product interface are present
       const product = {
         id: editMode ? formData.id : Math.random().toString(36).substr(2, 9),
         code: formData.code,
@@ -98,7 +100,9 @@ const ProductRegistration: React.FC = () => {
         category: formData.category,
         provider: formData.provider,
         totalInvested: editMode ? (existingProduct?.totalInvested || 0) : (parseFloat(formData.costPrice) * parseInt(formData.stock)),
-        totalEarned: editMode ? (existingProduct?.totalEarned || 0) : 0
+        totalEarned: editMode ? (existingProduct?.totalEarned || 0) : 0,
+        totalInputs: editMode ? (existingProduct?.totalInputs || 0) : parseInt(formData.stock),
+        totalOutputs: editMode ? (existingProduct?.totalOutputs || 0) : 0
       };
 
       await dataService.saveProduct(product);
