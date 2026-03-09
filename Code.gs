@@ -1,7 +1,7 @@
 
 /**
- * tiendita - Backend API v10.0
- * Sistema robusto de gestión financiera y persistencia en Google Sheets.
+ * tiendita - Backend API v11.1 (Stable Finance)
+ * Correcciones de persistencia, normalización de decimales y lógica de traspaso de sobres.
  */
 
 function doPost(e) {
@@ -19,7 +19,6 @@ function doPost(e) {
     const data = params.data;
     let result;
 
-    // Normalización de ID para acciones de borrado que pueden recibir objeto o string
     const extractId = (d) => (d && typeof d === 'object' ? d.id : d);
 
     switch(action) {
@@ -63,26 +62,42 @@ function doPost(e) {
   }
 }
 
-// --- GESTIÓN DE SOBRES ---
+/**
+ * Normaliza cualquier valor a número, manejando comas decimales y caracteres no numéricos.
+ */
+function parseAmount(val) {
+  if (val === null || val === undefined || val === "") return 0;
+  if (typeof val === "number") return val;
+  // Reemplaza coma por punto y elimina caracteres no numéricos excepto el punto y el signo menos
+  const cleaned = val.toString().replace(',', '.').replace(/[^\d.-]/g, '');
+  const num = parseFloat(cleaned);
+  return isNaN(num) ? 0 : num;
+}
 
+/**
+ * Actualiza el balance de un sobre específico.
+ */
 function updateEnvelopeBalance(id, amount) {
   if (!id) return false;
   const sheet = getSheet("Envelopes");
   const data = sheet.getDataRange().getValues();
   const searchId = id.toString().trim().toUpperCase();
+  const numericAmount = parseAmount(amount);
   
   for(let i = 1; i < data.length; i++) {
     if(data[i][0].toString().trim().toUpperCase() === searchId) {
-      const currentBalance = Number(data[i][2] || 0);
-      sheet.getRange(i + 1, 3).setValue(currentBalance + Number(amount));
+      const currentBalance = parseAmount(data[i][2]);
+      const newBalance = currentBalance + numericAmount;
+      sheet.getRange(i + 1, 3).setValue(newBalance);
       return true;
     }
   }
   return false;
 }
 
+// --- GESTIÓN DE SOBRES (MEJORADA) ---
+
 function saveEnvelope(env) {
-  const headers = ["id", "name", "balance", "description", "lastResetDate"];
   const sheet = getSheet("Envelopes");
   const values = sheet.getDataRange().getValues();
   const searchId = env.id.toString().trim().toUpperCase();
@@ -98,20 +113,29 @@ function saveEnvelope(env) {
   if(foundRow > -1) {
     sheet.getRange(foundRow, 2).setValue(env.name);
     sheet.getRange(foundRow, 4).setValue(env.description);
-    return {success: true, updated: true};
+    return {success: true};
   } else {
-    const rowData = headers.map(h => env[h] !== undefined ? env[h] : "");
+    const headers = ["id", "name", "balance", "description", "lastResetDate"];
+    const rowData = headers.map(h => {
+      if (h === 'balance') return parseAmount(env[h]);
+      return env[h] !== undefined ? env[h] : "";
+    });
     sheet.appendRow(rowData);
-    return {success: true, created: true};
+    return {success: true};
   }
 }
 
 function withdrawEnvelope(w) {
   const headers = ["id", "envelopeId", "envelopeName", "amount", "startDate", "endDate", "durationText", "notes"];
-  const sheet = getSheet("EnvelopeHistory");
-  const rowData = headers.map(h => w[h] !== undefined ? w[h] : "");
-  sheet.appendRow(rowData);
-  updateEnvelopeBalance(w.envelopeId, -Number(w.amount));
+  const amountToWithdraw = parseAmount(w.amount);
+  
+  const rowData = headers.map(h => {
+    if (h === 'amount') return amountToWithdraw;
+    return w[h] !== undefined ? w[h] : "";
+  });
+  
+  getSheet("EnvelopeHistory").appendRow(rowData);
+  updateEnvelopeBalance(w.envelopeId, -amountToWithdraw);
   return {success: true};
 }
 
@@ -122,42 +146,54 @@ function updateWithdrawal(w) {
   
   for(let i = 1; i < data.length; i++) {
     if(data[i][0].toString().trim().toUpperCase() === searchId) {
-      const oldAmount = Number(data[i][3] || 0);
-      const newAmount = Number(w.amount);
-      const diff = oldAmount - newAmount;
+      const oldAmount = parseAmount(data[i][3]);
+      const oldEnvId = data[i][1];
+      const newAmount = parseAmount(w.amount);
+      const newEnvId = w.envelopeId;
+
+      if (oldEnvId === newEnvId) {
+        // Mismo sobre: ajustamos la diferencia
+        const diff = oldAmount - newAmount; 
+        updateEnvelopeBalance(oldEnvId, diff);
+      } else {
+        // Cambio de sobre: revertimos el viejo y cobramos el nuevo
+        updateEnvelopeBalance(oldEnvId, oldAmount);     // Devolvemos íntegro al original
+        updateEnvelopeBalance(newEnvId, -newAmount);   // Descontamos del nuevo
+      }
       
+      // Actualizamos la fila en el historial
+      sheet.getRange(i + 1, 2).setValue(newEnvId);
+      sheet.getRange(i + 1, 3).setValue(w.envelopeName);
       sheet.getRange(i + 1, 4).setValue(newAmount);
       sheet.getRange(i + 1, 8).setValue(w.notes);
-      updateEnvelopeBalance(w.envelopeId, diff);
+      
       return {success: true};
     }
   }
-  return {error: "Retiro no encontrado"};
+  return {error: "Registro no encontrado"};
 }
 
 function deleteWithdrawal(id) {
-  if (!id) return {error: "ID de retiro no proporcionado"};
   const sheet = getSheet("EnvelopeHistory");
   const data = sheet.getDataRange().getValues();
   const searchId = id.toString().trim().toUpperCase();
   
   for(let i = 1; i < data.length; i++) {
     if(data[i][0].toString().trim().toUpperCase() === searchId) {
-      const amountToRestore = Number(data[i][3] || 0);
+      const amountToRestore = parseAmount(data[i][3]);
       const envId = data[i][1];
+      
       updateEnvelopeBalance(envId, amountToRestore);
       sheet.deleteRow(i + 1);
       return {success: true};
     }
   }
-  return {error: "No se encontró el retiro para eliminar"};
+  return {error: "No se encontró el retiro"};
 }
 
-// --- OPERACIONES DE INVENTARIO ---
+// --- INVENTARIO Y OPERACIONES ---
 
 function processPhysicalCount(counts, shift) {
-  if (!Array.isArray(counts)) return {error: "Formato de conteo inválido"};
-  
   const prodSheet = getSheet("Products");
   const outSheet = getSheet("Outputs");
   const prodData = prodSheet.getDataRange().getValues();
@@ -172,24 +208,26 @@ function processPhysicalCount(counts, shift) {
 
   let totalCOGS = 0;
   let totalProfit = 0;
+  let totalSold = 0;
 
   counts.forEach(count => {
     const searchId = count.productId.toString().trim().toUpperCase();
     for (let i = 1; i < prodData.length; i++) {
       if (prodData[i][idIdx].toString().trim().toUpperCase() === searchId) {
-        const sysStock = Number(prodData[i][stockIdx] || 0);
-        const phyStock = Number(count.physicalCount);
+        const sysStock = parseAmount(prodData[i][stockIdx]);
+        const phyStock = parseAmount(count.physicalCount);
         const diff = sysStock - phyStock;
 
         if (diff > 0) {
-          const cost = Number(prodData[i][costIdx] || 0);
-          const sale = Number(prodData[i][saleIdx] || 0);
+          const cost = parseAmount(prodData[i][costIdx]);
+          const sale = parseAmount(prodData[i][saleIdx]);
           const itemCOGS = diff * cost;
-          const itemSaleTotal = diff * sale;
-          const itemProfit = itemSaleTotal - itemCOGS;
+          const itemSale = diff * sale;
+          const itemProfit = itemSale - itemCOGS;
 
           totalCOGS += itemCOGS;
           totalProfit += itemProfit;
+          totalSold += itemSale;
 
           outSheet.appendRow([
             "PHYS-" + Utilities.getUuid(),
@@ -197,14 +235,16 @@ function processPhysicalCount(counts, shift) {
             prodData[i][headers.indexOf("name")],
             diff,
             sale,
-            itemSaleTotal,
+            itemSale,
             new Date().toISOString(),
-            shift || "Ajuste Físico"
+            shift
           ]);
           
           prodSheet.getRange(i + 1, stockIdx + 1).setValue(phyStock);
-          prodSheet.getRange(i + 1, earnedIdx + 1).setValue(Number(prodData[i][earnedIdx] || 0) + itemProfit);
-          prodSheet.getRange(i + 1, outsIdx + 1).setValue(Number(prodData[i][outsIdx] || 0) + diff);
+          const currentEarned = parseAmount(prodData[i][earnedIdx]);
+          prodSheet.getRange(i + 1, earnedIdx + 1).setValue(currentEarned + itemProfit);
+          const currentOuts = parseAmount(prodData[i][outsIdx]);
+          prodSheet.getRange(i + 1, outsIdx + 1).setValue(currentOuts + diff);
         }
         break;
       }
@@ -216,11 +256,45 @@ function processPhysicalCount(counts, shift) {
     const part = totalProfit / 3;
     ["ENV1", "ENV2", "ENV3"].forEach(id => updateEnvelopeBalance(id, part));
   }
-  return { success: true, totalProfit, totalCOGS };
+  return { success: true, totalProfit, totalCOGS, totalSold, netProfit: totalProfit };
+}
+
+function savePurchaseNote(note) {
+  const headers = ["id", "date", "provider", "totalAmount", "status", "detailsJson"];
+  const amount = parseAmount(note.totalAmount);
+  
+  upsertToSheet("PurchaseNotes", headers, {...note, totalAmount: amount}, "id");
+  if (note.status === 'Paid') updateEnvelopeBalance("ENV4", -amount);
+  return {success: true};
+}
+
+function updateNoteStatus(id, status) {
+  const sheet = getSheet("PurchaseNotes");
+  const data = sheet.getDataRange().getValues();
+  const searchId = id.toString().trim().toUpperCase();
+  for(let i = 1; i < data.length; i++) {
+    if(data[i][0].toString().trim().toUpperCase() === searchId) {
+      if (data[i][4] !== 'Paid' && status === 'Paid') {
+        const amount = parseAmount(data[i][3]);
+        updateEnvelopeBalance("ENV4", -amount);
+      }
+      sheet.getRange(i + 1, 5).setValue(status);
+      return {success: true};
+    }
+  }
+  return {error: "No encontrada"};
+}
+
+function saveProduct(p) {
+  const headers = ["id", "code", "name", "grams", "flavor", "costPrice", "salePrice", "stock", "category", "provider", "totalInvested", "totalEarned", "totalInputs", "totalOutputs"];
+  const cleanP = {...p};
+  ["costPrice", "salePrice", "stock", "totalInvested", "totalEarned", "totalInputs", "totalOutputs"].forEach(key => {
+    if (cleanP[key] !== undefined) cleanP[key] = parseAmount(cleanP[key]);
+  });
+  return upsertToSheet("Products", headers, cleanP, "id");
 }
 
 function saveOutputBatch(outputs) {
-  if (!Array.isArray(outputs)) return {error: "Datos de salida inválidos"};
   const outSheet = getSheet("Outputs");
   const prodSheet = getSheet("Products");
   const prodData = prodSheet.getDataRange().getValues();
@@ -238,16 +312,16 @@ function saveOutputBatch(outputs) {
     
     for(let i = 1; i < prodData.length; i++) {
       if(prodData[i][0].toString().trim().toUpperCase() === searchId) {
-        const cost = Number(prodData[i][costIdx] || 0);
-        const itemCOGS = Number(o.quantity) * cost;
-        const itemProfit = Number(o.totalSale) - itemCOGS;
-        
+        const cost = parseAmount(prodData[i][costIdx]);
+        const itemCOGS = parseAmount(o.quantity) * cost;
+        const itemProfit = parseAmount(o.totalSale) - itemCOGS;
         totalCOGS += itemCOGS;
         totalProfit += itemProfit;
         
-        const currentStock = Number(prodData[i][stockIdx] || 0);
-        prodSheet.getRange(i + 1, stockIdx + 1).setValue(currentStock - Number(o.quantity));
-        prodSheet.getRange(i + 1, earnedIdx + 1).setValue(Number(prodData[i][earnedIdx] || 0) + itemProfit);
+        const currentStock = parseAmount(prodData[i][stockIdx]);
+        prodSheet.getRange(i + 1, stockIdx + 1).setValue(currentStock - parseAmount(o.quantity));
+        const currentEarned = parseAmount(prodData[i][earnedIdx]);
+        prodSheet.getRange(i + 1, earnedIdx + 1).setValue(currentEarned + itemProfit);
         break;
       }
     }
@@ -261,7 +335,7 @@ function saveOutputBatch(outputs) {
   return {success: true};
 }
 
-// --- PERSISTENCIA Y FUNCIONES AUXILIARES ---
+// --- UTILIDADES ---
 
 function upsertToSheet(name, headers, obj, key) {
   const sheet = getSheet(name);
@@ -316,37 +390,6 @@ function getSheet(name) {
 
 function createResponse(data) {
   return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
-}
-
-// --- WRAPPERS DE ACCIÓN ---
-
-function saveProduct(p) {
-  const headers = ["id", "code", "name", "grams", "flavor", "costPrice", "salePrice", "stock", "category", "provider", "totalInvested", "totalEarned", "totalInputs", "totalOutputs"];
-  return upsertToSheet("Products", headers, p, "id");
-}
-
-function savePurchaseNote(note) {
-  const headers = ["id", "date", "provider", "totalAmount", "status", "detailsJson"];
-  upsertToSheet("PurchaseNotes", headers, note, "id");
-  if (note.status === 'Paid') updateEnvelopeBalance("ENV4", -Number(note.totalAmount));
-  return {success: true};
-}
-
-function updateNoteStatus(id, status) {
-  const sheet = getSheet("PurchaseNotes");
-  const data = sheet.getDataRange().getValues();
-  const searchId = id.toString().trim().toUpperCase();
-  for(let i = 1; i < data.length; i++) {
-    if(data[i][0].toString().trim().toUpperCase() === searchId) {
-      const currentStatus = data[i][4];
-      if (currentStatus !== 'Paid' && status === 'Paid') {
-        updateEnvelopeBalance("ENV4", -Number(data[i][3]));
-      }
-      sheet.getRange(i + 1, 5).setValue(status);
-      return {success: true};
-    }
-  }
-  return {error: "Nota no encontrada"};
 }
 
 function deleteProduct(id) { return {success: deleteRow("Products", id)}; }

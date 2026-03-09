@@ -4,7 +4,7 @@ import { HashRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, Package, PlusCircle, History, 
   RefreshCcw, ClipboardCheck, Wallet, Store,
-  Coins, List
+  Coins, List, Menu, X
 } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import Inventory from './components/Inventory';
@@ -16,12 +16,13 @@ import EnvelopesManager from './components/EnvelopesManager';
 import ProductsTable from './components/ProductsTable';
 import { dataService } from './services/dataService';
 
-const NavItem: React.FC<{ to: string, icon: React.ReactNode, label: string }> = ({ to, icon, label }) => {
+const NavItem: React.FC<{ to: string, icon: React.ReactNode, label: string, onClick?: () => void }> = ({ to, icon, label, onClick }) => {
   const location = useLocation();
   const isActive = location.pathname === to;
   return (
     <Link 
       to={to} 
+      onClick={onClick}
       className={`flex items-center space-x-3 px-4 py-3 rounded-xl transition-all ${
         isActive 
           ? 'bg-red-600 text-white shadow-lg shadow-red-200' 
@@ -34,35 +35,47 @@ const NavItem: React.FC<{ to: string, icon: React.ReactNode, label: string }> = 
   );
 };
 
-const Sidebar: React.FC = () => (
-  <aside className="w-64 bg-blue-900 border-r border-blue-800 flex flex-col h-screen sticky top-0 text-white shadow-2xl">
-    <div className="p-8 border-b border-blue-800/50">
-      <div className="flex items-center space-x-3">
-        <div className="bg-red-600 p-2.5 rounded-2xl shadow-lg shadow-red-900/40">
-          <Store className="text-white w-7 h-7" />
+const Sidebar: React.FC<{ isOpen: boolean, onClose: () => void }> = ({ isOpen, onClose }) => (
+  <>
+    {/* Overlay for mobile */}
+    <div 
+      className={`fixed inset-0 bg-blue-900/50 backdrop-blur-sm z-40 lg:hidden transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+      onClick={onClose}
+    />
+    
+    <aside className={`fixed lg:sticky top-0 left-0 z-50 w-64 bg-blue-900 border-r border-blue-800 flex flex-col h-screen text-white shadow-2xl transition-transform duration-300 transform ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+      <div className="p-8 border-b border-blue-800/50 flex justify-between items-center">
+        <div className="flex items-center space-x-3">
+          <div className="bg-red-600 p-2.5 rounded-2xl shadow-lg shadow-red-900/40">
+            <Store className="text-white w-7 h-7" />
+          </div>
+          <h1 className="text-2xl font-black tracking-tighter text-white">tiendita</h1>
         </div>
-        <h1 className="text-2xl font-black tracking-tighter text-white">tiendita</h1>
+        <button onClick={onClose} className="lg:hidden text-blue-100 hover:text-white">
+          <X size={24} />
+        </button>
       </div>
-    </div>
-    <nav className="flex-1 p-5 space-y-2 overflow-y-auto custom-scrollbar">
-      <NavItem to="/" icon={<LayoutDashboard size={20} />} label="Dashboard" />
-      <NavItem to="/products" icon={<List size={20} />} label="Productos" />
-      <NavItem to="/count" icon={<ClipboardCheck size={20} />} label="Inventario Físico" />
-      <NavItem to="/envelopes" icon={<Coins size={20} />} label="Sobres" />
-      <NavItem to="/inventory" icon={<Package size={20} />} label="Inventario" />
-      <NavItem to="/register" icon={<PlusCircle size={20} />} label="Nuevo Producto" />
-      <NavItem to="/restock" icon={<RefreshCcw size={20} />} label="Resurtido" />
-      <NavItem to="/history" icon={<History size={20} />} label="Historial" />
-    </nav>
-    <div className="p-5 border-t border-blue-800/50">
-      <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest text-center">Version 2.0 SMART</p>
-    </div>
-  </aside>
+      <nav className="flex-1 p-5 space-y-2 overflow-y-auto custom-scrollbar">
+        <NavItem to="/" icon={<LayoutDashboard size={20} />} label="Dashboard" onClick={onClose} />
+        <NavItem to="/products" icon={<List size={20} />} label="Productos" onClick={onClose} />
+        <NavItem to="/count" icon={<ClipboardCheck size={20} />} label="Inventario Físico" onClick={onClose} />
+        <NavItem to="/envelopes" icon={<Coins size={20} />} label="Sobres" onClick={onClose} />
+        <NavItem to="/inventory" icon={<Package size={20} />} label="Inventario" onClick={onClose} />
+        <NavItem to="/register" icon={<PlusCircle size={20} />} label="Nuevo Producto" onClick={onClose} />
+        <NavItem to="/restock" icon={<RefreshCcw size={20} />} label="Resurtido" onClick={onClose} />
+        <NavItem to="/history" icon={<History size={20} />} label="Historial" onClick={onClose} />
+      </nav>
+      <div className="p-5 border-t border-blue-800/50">
+        <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest text-center">Version 2.0 SMART</p>
+      </div>
+    </aside>
+  </>
 );
 
 const App: React.FC = () => {
   const [initialLoaded, setInitialLoaded] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   useEffect(() => {
     dataService.fetchAll().then(() => setInitialLoaded(true));
@@ -87,20 +100,29 @@ const App: React.FC = () => {
   return (
     <HashRouter>
       <div className="flex min-h-screen bg-slate-50/50">
-        <Sidebar />
-        <main className="flex-1">
-          <header className="bg-white/80 backdrop-blur-md border-b border-blue-100 px-8 py-5 flex justify-between items-center sticky top-0 z-10 shadow-sm">
-            <h2 className="text-xl font-black text-blue-900 tracking-tight">Panel de Control</h2>
+        <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
+        <main className="flex-1 min-w-0">
+          <header className="bg-white/80 backdrop-blur-md border-b border-blue-100 px-4 md:px-8 py-4 md:py-5 flex justify-between items-center sticky top-0 z-30 shadow-sm">
+            <div className="flex items-center space-x-4">
+              <button 
+                onClick={() => setIsSidebarOpen(true)}
+                className="lg:hidden p-2 text-blue-900 hover:bg-blue-50 rounded-xl transition-colors"
+              >
+                <Menu size={24} />
+              </button>
+              <h2 className="text-lg md:text-xl font-black text-blue-900 tracking-tight">Panel de Control</h2>
+            </div>
             <button 
               onClick={handleSync} 
               disabled={syncing}
-              className="flex items-center space-x-2 bg-red-50 text-red-600 px-5 py-2.5 rounded-xl hover:bg-red-100 transition-all font-bold border border-red-100 shadow-sm active:scale-95 disabled:opacity-50"
+              className="flex items-center space-x-2 bg-red-50 text-red-600 px-3 md:px-5 py-2 md:py-2.5 rounded-xl hover:bg-red-100 transition-all font-bold border border-red-100 shadow-sm active:scale-95 disabled:opacity-50"
             >
               <RefreshCcw size={18} className={syncing ? 'animate-spin' : ''} />
-              <span>{syncing ? 'Sincronizando...' : 'Sincronizar'}</span>
+              <span className="hidden sm:inline">{syncing ? 'Sincronizando...' : 'Sincronizar'}</span>
+              <span className="sm:hidden">{syncing ? '' : ''}</span>
             </button>
           </header>
-          <div className="p-8 max-w-7xl mx-auto">
+          <div className="p-4 md:p-8 max-w-7xl mx-auto">
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/products" element={<ProductsTable />} />

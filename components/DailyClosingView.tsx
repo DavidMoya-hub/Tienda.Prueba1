@@ -71,33 +71,33 @@ const DailyClosingView: React.FC = () => {
   const finalCash = totalSold - todayPayments;
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-6 duration-500">
-      <div className="flex items-center justify-between">
+    <div className="max-w-5xl mx-auto space-y-6 md:space-y-8 animate-in fade-in slide-in-from-bottom-6 duration-500">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-black text-slate-800 tracking-tight">Corte de Caja Diario</h2>
-          <p className="text-slate-500">Registra ventas y revisa el flujo de efectivo real del día.</p>
+          <h2 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight">Corte de Caja Diario</h2>
+          <p className="text-sm md:text-base text-slate-500">Registra ventas y revisa el flujo de efectivo real del día.</p>
         </div>
-        <div className="flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200 shadow-inner">
+        <div className="flex bg-slate-100 p-1 md:p-1.5 rounded-xl md:rounded-2xl border border-slate-200 shadow-inner w-full md:w-auto">
           <button 
             onClick={() => setShift('Day')}
-            className={`px-6 py-2 rounded-xl text-sm font-black transition-all ${shift === 'Day' ? 'bg-white shadow-md text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+            className={`flex-1 md:flex-none px-4 md:px-6 py-2 rounded-lg md:rounded-xl text-xs md:text-sm font-black transition-all ${shift === 'Day' ? 'bg-white shadow-md text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
           >
             Matutino
           </button>
           <button 
             onClick={() => setShift('Night')}
-            className={`px-6 py-2 rounded-xl text-sm font-black transition-all ${shift === 'Night' ? 'bg-white shadow-md text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+            className={`flex-1 md:flex-none px-4 md:px-6 py-2 rounded-lg md:rounded-xl text-xs md:text-sm font-black transition-all ${shift === 'Night' ? 'bg-white shadow-md text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
           >
             Vespertino
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8">
         <div className="lg:col-span-7 space-y-6">
-          <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
-            <h3 className="text-lg font-black text-slate-800 flex items-center space-x-2">
-              <Tag className="text-blue-500" size={20} />
+          <div className="bg-white p-5 md:p-8 rounded-2xl md:rounded-3xl border border-slate-200 shadow-sm space-y-4 md:space-y-6">
+            <h3 className="text-base md:text-lg font-black text-slate-800 flex items-center space-x-2">
+              <Tag className="text-blue-500 md:w-5 md:h-5" size={18} />
               <span>Entrada Rápida de Ventas</span>
             </h3>
             <div className="space-y-4">
@@ -107,7 +107,7 @@ const DailyClosingView: React.FC = () => {
                     if (e.target.value) addSaleItem(e.target.value, 1);
                     e.target.value = "";
                   }}
-                  className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-slate-700"
+                  className="w-full p-3 md:p-4 bg-slate-50 border-2 border-slate-100 rounded-xl md:rounded-2xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-slate-700 text-xs md:text-base"
                 >
                   <option value="">Selecciona un producto para vender...</option>
                   {products.map(p => (
@@ -116,33 +116,33 @@ const DailyClosingView: React.FC = () => {
                 </select>
               </div>
               
-              <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+              <div className="space-y-3 max-h-[300px] md:max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                 {salesItems.map((item, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-100 shadow-sm hover:border-blue-200 transition-all group">
-                    <div className="flex items-center space-x-4">
-                      <div className="bg-blue-600 text-white w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shadow-lg shadow-blue-200">
+                  <div key={idx} className="flex items-center justify-between p-3 md:p-4 bg-white rounded-xl md:rounded-2xl border border-slate-100 shadow-sm hover:border-blue-200 transition-all group">
+                    <div className="flex items-center space-x-3 md:space-x-4">
+                      <div className="bg-blue-600 text-white w-8 h-8 md:w-10 md:h-10 rounded-lg md:rounded-xl flex items-center justify-center font-black text-xs md:text-sm shadow-lg shadow-blue-200">
                         {item.quantity}
                       </div>
                       <div>
-                        <span className="font-bold text-slate-800 block">{item.name}</span>
-                        <span className="text-xs text-slate-400 font-bold uppercase tracking-tighter">Precio: ${item.salePrice} c/u</span>
+                        <span className="font-bold text-slate-800 block text-xs md:text-base">{item.name}</span>
+                        <span className="text-[10px] md:text-xs text-slate-400 font-bold uppercase tracking-tighter">Precio: ${item.salePrice} c/u</span>
                       </div>
                     </div>
-                    <div className="flex items-center space-x-4">
-                      <span className="font-black text-lg text-slate-900">${item.totalSale.toFixed(2)}</span>
+                    <div className="flex items-center space-x-3 md:space-x-4">
+                      <span className="font-black text-base md:text-lg text-slate-900">${item.totalSale.toFixed(2)}</span>
                       <button 
                         onClick={() => setSalesItems(salesItems.filter((_, i) => i !== idx))}
                         className="text-slate-300 hover:text-red-500 transition-colors"
                       >
-                        <Tag size={18} />
+                        <Tag size={16} className="md:w-[18px] md:h-[18px]" />
                       </button>
                     </div>
                   </div>
                 ))}
                 {salesItems.length === 0 && (
-                  <div className="py-20 text-center space-y-3">
-                    <Calculator className="mx-auto text-slate-200" size={48} />
-                    <p className="text-slate-400 font-medium italic">Agrega productos vendidos durante el turno.</p>
+                  <div className="py-16 md:py-20 text-center space-y-3">
+                    <Calculator className="mx-auto text-slate-200 md:w-12 md:h-12" size={40} />
+                    <p className="text-slate-400 font-medium italic text-xs md:text-base">Agrega productos vendidos durante el turno.</p>
                   </div>
                 )}
               </div>
@@ -151,42 +151,42 @@ const DailyClosingView: React.FC = () => {
         </div>
 
         <div className="lg:col-span-5">
-          <div className="bg-slate-900 text-white p-8 rounded-[2rem] shadow-2xl space-y-8 h-full flex flex-col justify-between border-4 border-slate-800">
-            <div className="space-y-8">
-              <h3 className="text-2xl font-black flex items-center space-x-3 text-blue-400 tracking-tight">
-                <Calculator size={32} />
+          <div className="bg-slate-900 text-white p-6 md:p-8 rounded-2xl md:rounded-[2rem] shadow-2xl space-y-6 md:space-y-8 h-full flex flex-col justify-between border-4 border-slate-800">
+            <div className="space-y-6 md:space-y-8">
+              <h3 className="text-xl md:text-2xl font-black flex items-center space-x-3 text-blue-400 tracking-tight">
+                <Calculator size={24} className="md:w-8 md:h-8" />
                 <span>Cálculo de Turno</span>
               </h3>
 
-              <div className="space-y-6">
+              <div className="space-y-4 md:space-y-6">
                 <div className="flex justify-between items-center group">
-                  <span className="text-slate-400 font-bold flex items-center space-x-2">
-                    <CreditCard size={18} /> <span>Ventas Brutas</span>
+                  <span className="text-slate-400 font-bold flex items-center space-x-2 text-xs md:text-sm">
+                    <CreditCard size={16} className="md:w-[18px] md:h-[18px]" /> <span>Ventas Brutas</span>
                   </span>
-                  <span className="text-3xl font-black text-white leading-none">${totalSold.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                  <span className="text-2xl md:text-3xl font-black text-white leading-none">${totalSold.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                 </div>
 
-                <div className="flex justify-between items-center group border-t border-slate-800 pt-6">
-                  <span className="text-slate-400 font-bold flex items-center space-x-2">
-                    <Wallet size={18} /> <span>Pagos Proveedores (Hoy)</span>
+                <div className="flex justify-between items-center group border-t border-slate-800 pt-4 md:pt-6">
+                  <span className="text-slate-400 font-bold flex items-center space-x-2 text-xs md:text-sm">
+                    <Wallet size={16} className="md:w-[18px] md:h-[18px]" /> <span>Pagos Proveedores (Hoy)</span>
                   </span>
-                  <span className="text-2xl font-bold text-red-400 leading-none">-${todayPayments.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                  <span className="text-xl md:text-2xl font-bold text-red-400 leading-none">-${todayPayments.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                 </div>
 
-                <div className="bg-blue-600/10 p-6 rounded-3xl mt-6 border border-blue-500/20 shadow-inner">
+                <div className="bg-blue-600/10 p-4 md:p-6 rounded-2xl md:rounded-3xl mt-4 md:mt-6 border border-blue-500/20 shadow-inner">
                   <div className="flex justify-between items-center mb-1">
-                    <span className="text-blue-300 font-black text-xs uppercase tracking-widest">Efectivo Sugerido en Caja</span>
-                    <Check className="text-blue-400" size={16} />
+                    <span className="text-blue-300 font-black text-[10px] md:text-xs uppercase tracking-widest">Efectivo Sugerido en Caja</span>
+                    <Check className="text-blue-400 md:w-4 md:h-4" size={14} />
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-4xl font-black text-blue-400 tracking-tighter">${finalCash.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                    <span className="text-3xl md:text-4xl font-black text-blue-400 tracking-tighter">${finalCash.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                   </div>
-                  <p className="text-[10px] text-blue-400/60 mt-2 font-bold uppercase tracking-tight">Ventas Totales - Salidas de efectivo registradas</p>
+                  <p className="text-[8px] md:text-[10px] text-blue-400/60 mt-2 font-bold uppercase tracking-tight">Ventas Totales - Salidas de efectivo registradas</p>
                 </div>
                 
-                <div className="flex justify-between items-center text-slate-500 pt-4 px-2">
-                  <span className="text-xs font-bold uppercase">Utilidad Proyectada:</span>
-                  <span className="font-black text-emerald-500">${(totalSold - totalCOGS).toLocaleString()}</span>
+                <div className="flex justify-between items-center text-slate-500 pt-2 md:pt-4 px-2">
+                  <span className="text-[10px] md:text-xs font-bold uppercase">Utilidad Proyectada:</span>
+                  <span className="font-black text-emerald-500 text-sm md:text-base">${(totalSold - totalCOGS).toLocaleString()}</span>
                 </div>
               </div>
             </div>
@@ -194,9 +194,9 @@ const DailyClosingView: React.FC = () => {
             <button 
               onClick={handleClosing}
               disabled={salesItems.length === 0}
-              className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-5 rounded-2xl transition-all shadow-xl shadow-blue-900/50 active:scale-95 flex items-center justify-center space-x-3 disabled:opacity-50 text-lg"
+              className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 md:py-5 rounded-xl md:rounded-2xl transition-all shadow-xl shadow-blue-900/50 active:scale-95 flex items-center justify-center space-x-3 disabled:opacity-50 text-base md:text-lg mt-6"
             >
-              {saved ? <Check size={24} /> : <Save size={24} />}
+              {saved ? <Check size={20} className="md:w-6 md:h-6" /> : <Save size={20} className="md:w-6 md:h-6" />}
               <span>{saved ? '¡Corte Guardado!' : 'Finalizar Turno'}</span>
             </button>
           </div>

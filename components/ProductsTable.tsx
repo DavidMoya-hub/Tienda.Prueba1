@@ -91,8 +91,8 @@ const ProductsTable: React.FC = () => {
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-black text-blue-900 tracking-tight">Gestión Maestra de Productos</h2>
-          <p className="text-slate-500 font-medium">Análisis detallado de rentabilidad y control de costos.</p>
+          <h2 className="text-2xl md:text-3xl font-black text-blue-900 tracking-tight">Gestión Maestra</h2>
+          <p className="text-xs md:text-sm text-slate-500 font-medium">Análisis de rentabilidad y costos.</p>
         </div>
         <div className="relative max-w-md w-full">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-400" size={20} />

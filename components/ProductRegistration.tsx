@@ -122,7 +122,7 @@ const ProductRegistration: React.FC = () => {
 
   return (
     <div className="max-w-2xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex items-center justify-between mb-10">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
         <div className="flex items-center space-x-4">
           {editMode && (
             <button onClick={() => navigate('/inventory')} className="p-3 bg-white hover:bg-red-50 text-red-600 rounded-2xl transition-all border border-red-50 shadow-sm active:scale-95">
@@ -130,10 +130,10 @@ const ProductRegistration: React.FC = () => {
             </button>
           )}
           <div>
-            <h2 className="text-3xl font-black text-blue-900 tracking-tight">
+            <h2 className="text-2xl md:text-3xl font-black text-blue-900 tracking-tight">
               {editMode ? 'Editar Artículo' : 'Nuevo Producto'}
             </h2>
-            <p className="text-slate-500 font-medium">
+            <p className="text-xs md:text-sm text-slate-500 font-medium">
               {editMode ? `Actualizando ${formData.name}` : 'Registra productos o usa IA con foto.'}
             </p>
           </div>
@@ -142,7 +142,7 @@ const ProductRegistration: React.FC = () => {
           <button 
             onClick={() => fileInputRef.current?.click()}
             disabled={isLoading}
-            className="flex items-center space-x-2 bg-blue-900 text-white px-8 py-4 rounded-2xl hover:bg-blue-800 transition-all shadow-xl shadow-blue-900/20 active:scale-95 disabled:opacity-50 font-black uppercase text-xs tracking-widest"
+            className="flex items-center justify-center space-x-2 bg-blue-900 text-white px-6 md:px-8 py-3 md:py-4 rounded-2xl hover:bg-blue-800 transition-all shadow-xl shadow-blue-900/20 active:scale-95 disabled:opacity-50 font-black uppercase text-[10px] md:text-xs tracking-widest w-full md:w-auto"
           >
             {isLoading ? <Loader2 className="animate-spin" size={20} /> : <Camera size={20} />}
             <span>IA Foto OCR</span>
@@ -152,30 +152,30 @@ const ProductRegistration: React.FC = () => {
       </div>
 
       {error && (
-        <div className="mb-8 p-5 bg-red-50 border-2 border-red-100 text-red-600 rounded-[2rem] flex items-center space-x-3 font-bold">
+        <div className="mb-8 p-4 md:p-5 bg-red-50 border-2 border-red-100 text-red-600 rounded-2xl md:rounded-[2rem] flex items-center space-x-3 font-bold text-sm md:text-base">
           <AlertCircle size={24} />
           <span>{error}</span>
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="bg-white p-10 rounded-[2.5rem] border border-blue-100 shadow-2xl shadow-blue-900/5 space-y-8">
-        <div className="grid grid-cols-2 gap-8">
-          <div className="space-y-3">
-            <label className="text-xs font-black text-blue-900 uppercase tracking-widest block px-1">Código de Barras</label>
+      <form onSubmit={handleSubmit} className="bg-white p-5 md:p-10 rounded-2xl md:rounded-[2.5rem] border border-blue-100 shadow-2xl shadow-blue-900/5 space-y-5 md:space-y-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-8">
+          <div className="space-y-2 md:space-y-3">
+            <label className="text-[10px] md:text-xs font-black text-blue-900 uppercase tracking-widest block px-1">Código de Barras</label>
             <input 
               required
               value={formData.code}
               onChange={(e) => setFormData({...formData, code: e.target.value})}
-              className="w-full px-5 py-4 bg-blue-50/30 border-2 border-transparent rounded-2xl focus:bg-white focus:border-blue-500 focus:outline-none transition-all font-bold text-slate-800"
+              className="w-full px-4 md:px-5 py-3 md:py-4 bg-blue-50/30 border-2 border-transparent rounded-xl md:rounded-2xl focus:bg-white focus:border-blue-500 focus:outline-none transition-all font-bold text-slate-800 text-sm md:text-base"
               placeholder="Ej. 750100..."
             />
           </div>
-          <div className="space-y-3">
-            <label className="text-xs font-black text-blue-900 uppercase tracking-widest block px-1">Categoría</label>
+          <div className="space-y-2 md:space-y-3">
+            <label className="text-[10px] md:text-xs font-black text-blue-900 uppercase tracking-widest block px-1">Categoría</label>
             <select 
               value={formData.category}
               onChange={(e) => setFormData({...formData, category: e.target.value})}
-              className="w-full px-5 py-4 bg-blue-50/30 border-2 border-transparent rounded-2xl focus:bg-white focus:border-blue-500 focus:outline-none transition-all font-bold text-slate-800"
+              className="w-full px-4 md:px-5 py-3 md:py-4 bg-blue-50/30 border-2 border-transparent rounded-xl md:rounded-2xl focus:bg-white focus:border-blue-500 focus:outline-none transition-all font-bold text-slate-800 text-sm md:text-base"
             >
               <option>General</option>
               <option>Abarrotes</option>
@@ -188,67 +188,67 @@ const ProductRegistration: React.FC = () => {
           </div>
         </div>
 
-        <div className="space-y-3">
-          <label className="text-xs font-black text-blue-900 uppercase tracking-widest block px-1">Nombre Comercial</label>
+        <div className="space-y-2 md:space-y-3">
+          <label className="text-[10px] md:text-xs font-black text-blue-900 uppercase tracking-widest block px-1">Nombre Comercial</label>
           <input 
             required
             value={formData.name}
             onChange={(e) => setFormData({...formData, name: e.target.value})}
-            className="w-full px-5 py-4 bg-blue-50/30 border-2 border-transparent rounded-2xl focus:bg-white focus:border-blue-500 focus:outline-none transition-all font-bold text-slate-800"
+            className="w-full px-4 md:px-5 py-3 md:py-4 bg-blue-50/30 border-2 border-transparent rounded-xl md:rounded-2xl focus:bg-white focus:border-blue-500 focus:outline-none transition-all font-bold text-slate-800 text-sm md:text-base"
             placeholder="Ej. Coca-Cola Original"
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-8">
-          <div className="space-y-3">
-            <label className="text-xs font-black text-blue-900 uppercase tracking-widest block px-1">Proveedor Oficial</label>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-8">
+          <div className="space-y-2 md:space-y-3">
+            <label className="text-[10px] md:text-xs font-black text-blue-900 uppercase tracking-widest block px-1">Proveedor Oficial</label>
             <input 
               value={formData.provider}
               onChange={(e) => setFormData({...formData, provider: e.target.value})}
-              className="w-full px-5 py-4 bg-blue-50/30 border-2 border-transparent rounded-2xl focus:bg-white focus:border-blue-500 focus:outline-none transition-all font-bold text-slate-800"
+              className="w-full px-4 md:px-5 py-3 md:py-4 bg-blue-50/30 border-2 border-transparent rounded-xl md:rounded-2xl focus:bg-white focus:border-blue-500 focus:outline-none transition-all font-bold text-slate-800 text-sm md:text-base"
               placeholder="Ej. PepsiCo / Marinela"
             />
           </div>
-          <div className="space-y-3">
-            <label className="text-xs font-black text-blue-900 uppercase tracking-widest block px-1">Presentación (G/ML)</label>
+          <div className="space-y-2 md:space-y-3">
+            <label className="text-[10px] md:text-xs font-black text-blue-900 uppercase tracking-widest block px-1">Presentación (G/ML)</label>
             <input 
               value={formData.grams}
               onChange={(e) => setFormData({...formData, grams: e.target.value})}
-              className="w-full px-5 py-4 bg-blue-50/30 border-2 border-transparent rounded-2xl focus:bg-white focus:border-blue-500 focus:outline-none transition-all font-bold text-slate-800"
+              className="w-full px-4 md:px-5 py-3 md:py-4 bg-blue-50/30 border-2 border-transparent rounded-xl md:rounded-2xl focus:bg-white focus:border-blue-500 focus:outline-none transition-all font-bold text-slate-800 text-sm md:text-base"
               placeholder="Ej. 600ml"
             />
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-8 pt-6 border-t border-blue-50">
-          <div className="space-y-3">
-            <label className="text-xs font-black text-blue-900 uppercase tracking-widest block px-1">Costo ($)</label>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 md:gap-8 pt-6 border-t border-blue-50">
+          <div className="space-y-2 md:space-y-3">
+            <label className="text-[10px] md:text-xs font-black text-blue-900 uppercase tracking-widest block px-1">Costo ($)</label>
             <input 
               required
               type="number" step="0.01"
               value={formData.costPrice}
               onChange={(e) => setFormData({...formData, costPrice: e.target.value})}
-              className="w-full px-5 py-4 bg-red-50/50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-red-500 focus:outline-none transition-all font-black text-red-600 text-lg"
+              className="w-full px-4 md:px-5 py-3 md:py-4 bg-red-50/50 border-2 border-transparent rounded-xl md:rounded-2xl focus:bg-white focus:border-red-500 focus:outline-none transition-all font-black text-red-600 text-base md:text-lg"
             />
           </div>
-          <div className="space-y-3">
-            <label className="text-xs font-black text-blue-900 uppercase tracking-widest block px-1">Venta ($)</label>
+          <div className="space-y-2 md:space-y-3">
+            <label className="text-[10px] md:text-xs font-black text-blue-900 uppercase tracking-widest block px-1">Venta ($)</label>
             <input 
               required
               type="number" step="0.01"
               value={formData.salePrice}
               onChange={(e) => setFormData({...formData, salePrice: e.target.value})}
-              className="w-full px-5 py-4 bg-blue-50/50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-blue-500 focus:outline-none transition-all font-black text-blue-600 text-lg"
+              className="w-full px-4 md:px-5 py-3 md:py-4 bg-blue-50/50 border-2 border-transparent rounded-xl md:rounded-2xl focus:bg-white focus:border-blue-500 focus:outline-none transition-all font-black text-blue-600 text-base md:text-lg"
             />
           </div>
-          <div className="space-y-3">
-            <label className="text-xs font-black text-blue-900 uppercase tracking-widest block px-1">Stock {editMode ? 'Actual' : 'Inicial'}</label>
+          <div className="space-y-2 md:space-y-3">
+            <label className="text-[10px] md:text-xs font-black text-blue-900 uppercase tracking-widest block px-1">Stock {editMode ? 'Actual' : 'Inicial'}</label>
             <input 
               required
               type="number"
               value={formData.stock}
               onChange={(e) => setFormData({...formData, stock: e.target.value})}
-              className="w-full px-5 py-4 bg-slate-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-slate-800 focus:outline-none transition-all font-black text-slate-800 text-lg"
+              className="w-full px-4 md:px-5 py-3 md:py-4 bg-slate-50 border-2 border-transparent rounded-xl md:rounded-2xl focus:bg-white focus:border-slate-800 focus:outline-none transition-all font-black text-slate-800 text-base md:text-lg"
             />
           </div>
         </div>
@@ -256,9 +256,9 @@ const ProductRegistration: React.FC = () => {
         <button 
           type="submit"
           disabled={isLoading}
-          className="w-full bg-blue-600 text-white font-black py-6 rounded-2xl hover:bg-blue-700 transition-all shadow-xl shadow-blue-900/20 active:scale-95 flex items-center justify-center space-x-3 disabled:opacity-50 text-xl"
+          className="w-full bg-blue-600 text-white font-black py-4 md:py-6 rounded-xl md:rounded-2xl hover:bg-blue-700 transition-all shadow-xl shadow-blue-900/20 active:scale-95 flex items-center justify-center space-x-3 disabled:opacity-50 text-base md:text-xl"
         >
-          {success ? <Check size={32} /> : <span>{editMode ? 'Guardar Cambios' : 'Registrar en Inventario'}</span>}
+          {success ? <Check size={24} className="md:w-8 md:h-8" /> : <span>{editMode ? 'Guardar Cambios' : 'Registrar en Inventario'}</span>}
         </button>
       </form>
     </div>
