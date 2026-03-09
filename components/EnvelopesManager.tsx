@@ -33,10 +33,10 @@ const EnvelopesManager: React.FC = () => {
   const [editingWithdrawal, setEditingWithdrawal] = useState<EnvelopeWithdrawal | null>(null);
   const [withdrawalNotes, setWithdrawalNotes] = useState("");
   
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<any>({
     id: '',
     name: '',
-    balance: 0,
+    balance: '0',
     description: '',
     lastResetDate: new Date().toISOString()
   });
@@ -58,13 +58,13 @@ const EnvelopesManager: React.FC = () => {
   const openModal = (env?: Envelope) => {
     if (env) {
       setEditingEnv(env);
-      setFormData({ ...env });
+      setFormData({ ...env, balance: String(env.balance) });
     } else {
       setEditingEnv(null);
       setFormData({
         id: 'ENV-' + Math.random().toString(36).substr(2, 5).toUpperCase(),
         name: '',
-        balance: 0,
+        balance: '0',
         description: '',
         lastResetDate: new Date().toISOString()
       });
@@ -76,7 +76,11 @@ const EnvelopesManager: React.FC = () => {
     e.preventDefault();
     setIsProcessing(true);
     try {
-      await dataService.saveEnvelope(formData as Envelope);
+      const dataToSave = {
+        ...formData,
+        balance: parseFloat(formData.balance as string) || 0
+      };
+      await dataService.saveEnvelope(dataToSave as Envelope);
       await refreshData();
       setShowModal(false);
     } catch (err) {
@@ -101,7 +105,7 @@ const EnvelopesManager: React.FC = () => {
   };
 
   const openEditWithdrawal = (w: EnvelopeWithdrawal) => {
-    setEditingWithdrawal({ ...w });
+    setEditingWithdrawal({ ...w, amount: String(w.amount) } as any);
     setShowEditWithdrawalModal(true);
   };
 
@@ -110,7 +114,11 @@ const EnvelopesManager: React.FC = () => {
     if (!editingWithdrawal) return;
     setIsProcessing(true);
     try {
-      await dataService.updateWithdrawal(editingWithdrawal);
+      const dataToUpdate = {
+        ...editingWithdrawal,
+        amount: parseFloat((editingWithdrawal as any).amount) || 0
+      };
+      await dataService.updateWithdrawal(dataToUpdate as any);
       await refreshData();
       setShowEditWithdrawalModal(false);
     } catch (err) {
@@ -247,9 +255,14 @@ const EnvelopesManager: React.FC = () => {
               <div className="space-y-3 md:space-y-4">
                 <div className="flex justify-between items-center px-1">
                   <label className="text-[10px] font-black text-blue-900 uppercase tracking-widest">Saldo Actual ($)</label>
-                  {!isBalanceEditable(formData.id) && <span className="text-[8px] md:text-[9px] font-black text-red-500 uppercase flex items-center gap-1"><Lock size={10} /> Sólo lectura</span>}
                 </div>
-                <input type="number" required disabled={!isBalanceEditable(formData.id)} value={formData.balance} onChange={(e) => setFormData({...formData, balance: parseFloat(e.target.value) || 0})} className={`w-full p-4 md:p-5 border-2 border-transparent rounded-2xl focus:outline-none transition-all font-black text-xl md:text-2xl ${isBalanceEditable(formData.id) ? 'bg-blue-50/50 text-blue-600 focus:bg-white focus:border-blue-500' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`} />
+                <input 
+                  type="number" 
+                  required 
+                  value={formData.balance} 
+                  onChange={(e) => setFormData({...formData, balance: e.target.value})} 
+                  className="w-full p-4 md:p-5 border-2 border-transparent rounded-2xl focus:outline-none transition-all font-black text-xl md:text-2xl bg-blue-50/50 text-blue-600 focus:bg-white focus:border-blue-500" 
+                />
               </div>
               <div className="space-y-3 md:space-y-4">
                 <label className="text-[10px] font-black text-blue-900 uppercase tracking-widest px-1">Descripción</label>
@@ -271,7 +284,14 @@ const EnvelopesManager: React.FC = () => {
             <form onSubmit={handleUpdateWithdrawal} className="p-6 md:p-10 space-y-6 md:space-y-8">
               <div className="space-y-3 md:space-y-4">
                 <label className="text-[10px] font-black text-blue-900 uppercase tracking-widest">Monto del Retiro ($)</label>
-                <input type="number" step="0.01" required value={editingWithdrawal.amount} onChange={(e) => setEditingWithdrawal({...editingWithdrawal, amount: parseFloat(e.target.value) || 0})} className="w-full p-4 md:p-5 bg-blue-50/50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-blue-500 transition-all font-black text-xl md:text-2xl text-red-600" />
+                <input 
+                  type="number" 
+                  step="0.01" 
+                  required 
+                  value={(editingWithdrawal as any).amount} 
+                  onChange={(e) => setEditingWithdrawal({...editingWithdrawal, amount: e.target.value} as any)} 
+                  className="w-full p-4 md:p-5 bg-blue-50/50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-blue-500 transition-all font-black text-xl md:text-2xl text-red-600" 
+                />
               </div>
               <div className="space-y-3 md:space-y-4">
                 <label className="text-[10px] font-black text-blue-900 uppercase tracking-widest">Notas / Motivo</label>

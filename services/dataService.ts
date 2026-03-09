@@ -41,7 +41,22 @@ export const dataService = {
         callApi('getClosings'),
         callApi('getPriceHistory'),
       ]);
-      this._products = products || [];
+      this._products = (products || []).map((p: any) => ({
+        id: String(p.id || ''),
+        code: String(p.code || ''),
+        name: String(p.name || 'Sin Nombre'),
+        grams: String(p.grams || ''),
+        flavor: String(p.flavor || ''),
+        costPrice: Number(p.costPrice || 0),
+        salePrice: Number(p.salePrice || 0),
+        stock: Number(p.stock || 0),
+        category: String(p.category || 'General'),
+        provider: String(p.provider || ''),
+        totalInvested: Number(p.totalInvested || 0),
+        totalEarned: Number(p.totalEarned || 0),
+        totalInputs: Number(p.totalInputs || 0),
+        totalOutputs: Number(p.totalOutputs || 0)
+      }));
       this._envelopes = envelopes || [];
       this._envelopeHistory = envHistory || [];
       this._purchaseNotes = purchaseNotes || [];

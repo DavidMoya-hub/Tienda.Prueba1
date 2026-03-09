@@ -20,7 +20,12 @@ const Restock: React.FC = () => {
 
   const filteredProducts = useMemo(() => {
     if (!searchTerm) return [];
-    return products.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.code.includes(searchTerm)).slice(0, 5);
+    return products.filter(p => {
+      if (!p || !p.name) return false;
+      const nameMatch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
+      const codeMatch = p.code ? p.code.toString().includes(searchTerm) : false;
+      return nameMatch || codeMatch;
+    }).slice(0, 5);
   }, [products, searchTerm]);
 
   const addToCart = (product: Product, quantity: number = 1) => {
