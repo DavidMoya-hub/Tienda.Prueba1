@@ -4,6 +4,23 @@
  * Correcciones de persistencia, normalización de decimales y lógica de traspaso de sobres.
  */
 
+function doGet(e) {
+  const action = e.parameter.action;
+  let result;
+  switch(action) {
+    case 'getProducts': result = getSheetData("Products"); break;
+    case 'getEnvelopes': result = getSheetData("Envelopes"); break;
+    case 'getEnvelopeHistory': result = getSheetData("EnvelopeHistory"); break;
+    case 'getPurchaseNotes': result = getSheetData("PurchaseNotes"); break;
+    case 'getInputs': result = getSheetData("Inputs"); break;
+    case 'getOutputs': result = getSheetData("Outputs"); break;
+    case 'getClosings': result = getSheetData("Closings"); break;
+    case 'getPriceHistory': result = getSheetData("PriceHistory"); break;
+    default: result = {error: "Acción no reconocida o no soportada vía GET"};
+  }
+  return createResponse(result);
+}
+
 function doPost(e) {
   const lock = LockService.getScriptLock();
   try {
@@ -41,6 +58,7 @@ function doPost(e) {
       // --- OPERACIONES ---
       case 'saveProduct': result = saveProduct(data); break;
       case 'savePurchaseNote': result = savePurchaseNote(data); break;
+      case 'saveOutput': result = saveOutputBatch([data]); break;
       case 'saveOutputBatch': result = saveOutputBatch(data); break;
       case 'saveClosing': result = saveClosing(data); break;
       case 'updateNoteStatus': result = updateNoteStatus(data.id, data.status); break;
@@ -237,7 +255,9 @@ function processPhysicalCount(counts, shift) {
             sale,
             itemSale,
             new Date().toISOString(),
-            shift
+            shift,
+            "Ajuste de Inventario Físico",
+            "exit"
           ]);
           
           prodSheet.getRange(i + 1, stockIdx + 1).setValue(phyStock);
@@ -264,8 +284,65 @@ function savePurchaseNote(note) {
   const amount = parseAmount(note.totalAmount);
   
   upsertToSheet("PurchaseNotes", headers, {...note, totalAmount: amount}, "id");
+  
+  // Registrar entradas individuales en la hoja "Inputs"
+  try {
+    const details = JSON.parse(note.detailsJson);
+    const inputSheet = getSheet("Inputs");
+    const inputHeaders = ["id", "productId", "productName", "quantity", "unitCost", "totalCost", "date", "provider", "notes", "type"];
+    
+    details.forEach(item => {
+      const inputRow = inputHeaders.map(h => {
+        if (h === 'id') return "INP-" + Utilities.getUuid();
+        if (h === 'productId') return item.productId;
+        if (h === 'productName') return item.productName;
+        if (h === 'quantity') return parseAmount(item.quantity);
+        if (h === 'unitCost') return parseAmount(item.unitCost);
+        if (h === 'totalCost') return parseAmount(item.totalCost);
+        if (h === 'date') return note.date;
+        if (h === 'provider') return note.provider;
+        if (h === 'notes') return "Compra: " + note.id;
+        if (h === 'type') return "entry";
+        return "";
+      });
+      inputSheet.appendRow(inputRow);
+      
+      // Actualizar stock y totalInvested en Products
+      updateProductStock(item.productId, parseAmount(item.quantity), parseAmount(item.totalCost), true);
+    });
+  } catch (e) {
+    console.error("Error al procesar detalles de compra: " + e.message);
+  }
+
   if (note.status === 'Paid') updateEnvelopeBalance("ENV4", -amount);
   return {success: true};
+}
+
+function updateProductStock(productId, quantity, amount, isInput) {
+  const sheet = getSheet("Products");
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const idIdx = 0;
+  const stockIdx = headers.indexOf("stock");
+  const investedIdx = headers.indexOf("totalInvested");
+  const inputsIdx = headers.indexOf("totalInputs");
+  
+  const searchId = productId.toString().trim().toUpperCase();
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][idIdx].toString().trim().toUpperCase() === searchId) {
+      const currentStock = parseAmount(data[i][stockIdx]);
+      const currentInvested = parseAmount(data[i][investedIdx]);
+      const currentInputs = parseAmount(data[i][inputsIdx]);
+      
+      if (isInput) {
+        sheet.getRange(i + 1, stockIdx + 1).setValue(currentStock + quantity);
+        sheet.getRange(i + 1, investedIdx + 1).setValue(currentInvested + amount);
+        sheet.getRange(i + 1, inputsIdx + 1).setValue(currentInputs + quantity);
+      }
+      return true;
+    }
+  }
+  return false;
 }
 
 function updateNoteStatus(id, status) {
@@ -302,12 +379,26 @@ function saveOutputBatch(outputs) {
   const stockIdx = headers.indexOf("stock");
   const earnedIdx = headers.indexOf("totalEarned");
   const costIdx = headers.indexOf("costPrice");
+  const outsIdx = headers.indexOf("totalOutputs");
   
   let totalCOGS = 0;
   let totalProfit = 0;
 
   outputs.forEach(o => {
-    outSheet.appendRow([o.id, o.productId, o.productName, o.quantity, o.salePrice, o.totalSale, o.date, o.shift]);
+    // ["id", "productId", "productName", "quantity", "salePrice", "totalSale", "date", "shift", "notes", "type"]
+    outSheet.appendRow([
+      o.id, 
+      o.productId, 
+      o.productName, 
+      parseAmount(o.quantity), 
+      parseAmount(o.salePrice), 
+      parseAmount(o.totalSale), 
+      o.date, 
+      o.shift, 
+      o.notes || "", 
+      o.type || "exit"
+    ]);
+    
     const searchId = o.productId.toString().trim().toUpperCase();
     
     for(let i = 1; i < prodData.length; i++) {
@@ -322,6 +413,8 @@ function saveOutputBatch(outputs) {
         prodSheet.getRange(i + 1, stockIdx + 1).setValue(currentStock - parseAmount(o.quantity));
         const currentEarned = parseAmount(prodData[i][earnedIdx]);
         prodSheet.getRange(i + 1, earnedIdx + 1).setValue(currentEarned + itemProfit);
+        const currentOuts = parseAmount(prodData[i][outsIdx]);
+        prodSheet.getRange(i + 1, outsIdx + 1).setValue(currentOuts + parseAmount(o.quantity));
         break;
       }
     }
@@ -408,8 +501,8 @@ function setupSheet() {
     "Envelopes": ["id", "name", "balance", "description", "lastResetDate"],
     "EnvelopeHistory": ["id", "envelopeId", "envelopeName", "amount", "startDate", "endDate", "durationText", "notes"],
     "PurchaseNotes": ["id", "date", "provider", "totalAmount", "status", "detailsJson"],
-    "Inputs": ["id", "productId", "productName", "quantity", "unitCost", "totalCost", "date", "provider"],
-    "Outputs": ["id", "productId", "productName", "quantity", "salePrice", "totalSale", "date", "shift"],
+    "Inputs": ["id", "productId", "productName", "quantity", "unitCost", "totalCost", "date", "provider", "notes", "type"],
+    "Outputs": ["id", "productId", "productName", "quantity", "salePrice", "totalSale", "date", "shift", "notes", "type"],
     "Closings": ["id", "date", "totalSold", "netProfit", "cogs"],
     "PriceHistory": ["id", "productId", "productName", "field", "oldValue", "newValue", "date"]
   };

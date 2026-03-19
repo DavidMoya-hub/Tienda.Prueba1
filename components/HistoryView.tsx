@@ -5,9 +5,18 @@ import { dataService } from '../services/dataService';
 const HistoryView: React.FC = () => {
   const [tab, setTab] = useState<'Inputs' | 'Outputs' | 'Audit' | 'Debts'>('Inputs');
   const inputs = dataService.getInputs();
+  const outputs = dataService.getOutputs();
   const closings = dataService.getClosings();
   const priceHistory = dataService.getPriceHistory();
   const purchaseNotes = dataService.getPurchaseNotes();
+
+  const movements = useMemo(() => {
+    const all = [
+      ...inputs.map(i => ({ ...i, type: 'entry' as const })),
+      ...outputs.map(o => ({ ...o, type: 'exit' as const }))
+    ];
+    return all.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [inputs, outputs]);
 
   const handleMarkAsPaid = async (noteId: string) => {
     if (confirm("¿Marcar esta nota como PAGADA? Se usará el capital del Sobre 4.")) {
@@ -62,22 +71,28 @@ const HistoryView: React.FC = () => {
               <thead className="bg-blue-50/50 text-blue-900/40 text-[8px] md:text-[10px] font-black uppercase tracking-[0.2em]">
                 <tr>
                   <th className="px-4 md:px-8 py-4 md:py-6">Fecha</th>
+                  <th className="px-4 md:px-8 py-4 md:py-6">Tipo</th>
                   <th className="px-4 md:px-8 py-4 md:py-6">Producto</th>
-                  <th className="px-4 md:px-8 py-4 md:py-6">Proveedor</th>
                   <th className="px-4 md:px-8 py-4 md:py-6">Cant</th>
-                  <th className="px-4 md:px-8 py-4 md:py-6">Costo</th>
-                  <th className="px-4 md:px-8 py-4 md:py-6 text-right">Total</th>
+                  <th className="px-4 md:px-8 py-4 md:py-6">Notas</th>
+                  <th className="px-4 md:px-8 py-4 md:py-6 text-right">Monto</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-blue-50 text-xs md:text-sm">
-                {inputs.slice().reverse().map(log => (
+                {movements.map(log => (
                   <tr key={log.id} className="hover:bg-blue-50/30 transition-colors group">
                     <td className="px-4 md:px-8 py-3 md:py-5 text-slate-400 font-bold">{new Date(log.date).toLocaleDateString()}</td>
+                    <td className="px-4 md:px-8 py-3 md:py-5">
+                      <span className={`px-2 md:px-3 py-1 rounded-lg font-black text-[8px] md:text-[10px] uppercase tracking-widest ${log.type === 'entry' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-red-50 text-red-600 border border-red-100'}`}>
+                        {log.type === 'entry' ? 'Entrada' : 'Salida'}
+                      </span>
+                    </td>
                     <td className="px-4 md:px-8 py-3 md:py-5 font-black text-slate-800 text-sm md:text-base">{log.productName}</td>
-                    <td className="px-4 md:px-8 py-3 md:py-5 text-blue-400 font-bold">{log.provider}</td>
                     <td className="px-4 md:px-8 py-3 md:py-5 font-black text-blue-900"><span className="bg-blue-50 px-2 md:px-3 py-1 rounded-lg">{log.quantity}</span></td>
-                    <td className="px-4 md:px-8 py-3 md:py-5 text-slate-400 font-bold">${Number(log.unitCost)?.toFixed(2)}</td>
-                    <td className="px-4 md:px-8 py-3 md:py-5 font-black text-red-600 text-right text-base md:text-lg">${Number(log.totalCost)?.toFixed(2)}</td>
+                    <td className="px-4 md:px-8 py-3 md:py-5 font-black text-slate-800 text-sm md:text-base">{log.notes || '-'}</td>
+                    <td className={`px-4 md:px-8 py-3 md:py-5 font-black text-right text-base md:text-lg ${log.type === 'entry' ? 'text-red-600' : 'text-emerald-600'}`}>
+                      ${log.type === 'entry' ? (log as any).totalCost?.toFixed(2) : (log as any).totalSale?.toFixed(2)}
+                    </td>
                   </tr>
                 ))}
               </tbody>

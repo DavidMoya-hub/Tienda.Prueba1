@@ -40,18 +40,20 @@ const DailyClosingView: React.FC = () => {
     const totalCOGS = salesItems.reduce((acc, i) => acc + i.totalCost, 0);
     const netProfit = totalSold - totalCOGS;
 
-    salesItems.forEach(item => {
-      dataService.saveOutput({
-        id: item.id,
-        productId: item.productId,
-        productName: item.name,
-        quantity: item.quantity,
-        salePrice: item.salePrice,
-        totalSale: item.totalSale,
-        date: new Date().toISOString(),
-        shift
-      });
-    });
+    const outputs: any[] = salesItems.map(item => ({
+      id: item.id,
+      productId: item.productId,
+      productName: item.name,
+      quantity: item.quantity,
+      salePrice: item.salePrice,
+      totalSale: item.totalSale,
+      date: new Date().toISOString(),
+      shift,
+      notes: '', // Se puede expandir para permitir notas por item
+      type: 'exit'
+    }));
+
+    dataService.saveOutputBatch(outputs);
 
     dataService.saveClosing({
       id: Math.random().toString(36).substr(2, 9),

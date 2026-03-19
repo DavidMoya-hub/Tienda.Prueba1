@@ -65,6 +65,8 @@ export interface InputTransaction {
   provider: string;
   invoiceId: string;
   status: 'Paid' | 'Pending';
+  notes: string;
+  type: 'entry';
 }
 
 export interface OutputTransaction {
@@ -76,6 +78,8 @@ export interface OutputTransaction {
   totalSale: number;
   date: string;
   shift: string;
+  notes: string;
+  type: 'exit';
 }
 
 export interface DailyClosing {
