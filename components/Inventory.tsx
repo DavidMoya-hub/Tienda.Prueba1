@@ -5,7 +5,13 @@ import { dataService } from '../services/dataService';
 
 const Inventory: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [, setUpdateCount] = useState(0);
   const navigate = useNavigate();
+
+  React.useEffect(() => {
+    return dataService.subscribe(() => setUpdateCount(c => c + 1));
+  }, []);
+
   const products = dataService.getProducts();
 
   const filteredProducts = products.filter(p => 

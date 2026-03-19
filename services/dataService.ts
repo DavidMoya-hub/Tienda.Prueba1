@@ -17,15 +17,15 @@ const runGas = async (action: string, data: any = null): Promise<any> => {
 
   // Entorno Vercel / Local (Fetch API Directo)
   try {
-    // Protocolo corregido: mode 'cors' con Content-Type 'text/plain;charset=utf-8' para evitar preflight
     const response = await fetch(API_URL, {
       method: 'POST',
       redirect: 'follow',
-      mode: 'cors', 
+      mode: 'cors',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({ action, data })
     });
 
+    // Verificación de estado 200 o 302
     if (!response.ok && response.status !== 302) {
       throw new Error(`Error de Servidor: ${response.status}`);
     }
@@ -33,17 +33,22 @@ const runGas = async (action: string, data: any = null): Promise<any> => {
     const text = await response.text();
     
     if (text.includes('<html') || text.includes('<!DOCTYPE html>')) {
-      throw new Error("Error de Servidor: Respuesta no válida (HTML)");
+      throw new Error("Error de Servidor: El servidor devolvió una página de error (HTML). Verifica la URL del script.");
     }
 
     try {
       const json = JSON.parse(text);
       if (json && json.error) throw new Error(json.error);
+      
+      // Devolvemos el JSON tal cual. Si es un array (para GET), se mantiene como array.
+      // Si es un objeto (para POST), se mantiene como objeto.
       return json;
     } catch (e) {
-      // Si la respuesta es exitosa pero no es JSON (común en algunos proxies de Google), devolvemos éxito
-      if (response.ok) return { success: true };
-      throw new Error("Error de Servidor: Respuesta no válida (No JSON)");
+      // Si no es JSON pero el status es OK, devolvemos un objeto de éxito
+      if (response.ok || response.status === 302) {
+        return { success: true };
+      }
+      throw new Error("Error de Servidor: La respuesta no es un JSON válido. Respuesta recibida: " + text.substring(0, 100));
     }
   } catch (error) {
     console.error(`Error en fetch directo (${action}):`, error);
@@ -60,6 +65,18 @@ export const dataService = {
   _outputs: [] as OutputTransaction[],
   _closings: [] as DailyClosing[],
   _priceHistory: [] as PriceHistory[],
+  _listeners: [] as (() => void)[],
+
+  subscribe(listener: () => void) {
+    this._listeners.push(listener);
+    return () => {
+      this._listeners = this._listeners.filter(l => l !== listener);
+    };
+  },
+
+  _notify() {
+    this._listeners.forEach(l => l());
+  },
 
   async fetchAll() {
     try {
@@ -74,20 +91,22 @@ export const dataService = {
         runGas('getPriceHistory'),
       ]);
 
-      this._products = (products || []).map((p: any) => ({
+      this._products = (Array.isArray(products) ? products : []).map((p: any) => ({
         ...p,
         id: String(p.id || ''),
         costPrice: Number(p.costPrice || 0),
         salePrice: Number(p.salePrice || 0),
         stock: Number(p.stock || 0)
       }));
-      this._envelopes = envelopes || [];
-      this._envelopeHistory = envHistory || [];
-      this._purchaseNotes = purchaseNotes || [];
-      this._inputs = (inputs || []).map((i: any) => ({ ...i, type: 'entry', notes: i.notes || '' }));
-      this._outputs = (outputs || []).map((o: any) => ({ ...o, type: 'exit', notes: o.notes || '' }));
-      this._closings = closings || [];
-      this._priceHistory = priceHistory || [];
+      this._envelopes = Array.isArray(envelopes) ? envelopes : [];
+      this._envelopeHistory = Array.isArray(envHistory) ? envHistory : [];
+      this._purchaseNotes = Array.isArray(purchaseNotes) ? purchaseNotes : [];
+      this._inputs = (Array.isArray(inputs) ? inputs : []).map((i: any) => ({ ...i, type: 'entry', notes: i.notes || '' }));
+      this._outputs = (Array.isArray(outputs) ? outputs : []).map((o: any) => ({ ...o, type: 'exit', notes: o.notes || '' }));
+      this._closings = Array.isArray(closings) ? closings : [];
+      this._priceHistory = Array.isArray(priceHistory) ? priceHistory : [];
+      
+      this._notify();
     } catch (e) { 
       console.error("Error en fetchAll:", e);
       throw e; // Propagar el error para que la UI pueda reportarlo
@@ -127,7 +146,7 @@ export const dataService = {
   async withdrawEnvelope(w: EnvelopeWithdrawal) { await runGas('withdrawEnvelope', w); await this.fetchAll(); },
   async deleteWithdrawal(id: string) { await runGas('deleteWithdrawal', id); await this.fetchAll(); },
   async updateWithdrawal(w: EnvelopeWithdrawal) { await runGas('updateWithdrawal', w); await this.fetchAll(); },
-  async saveRestockNote(note: PurchaseNote) { await runGas('savePurchaseNote', note); await this.fetchAll(); },
+  async saveRestockNote(note: PurchaseNote) { const res = await runGas('savePurchaseNote', note); await this.fetchAll(); return res; },
   async saveOutput(output: OutputTransaction) { await runGas('saveOutput', output); await this.fetchAll(); },
   async saveOutputBatch(outputs: OutputTransaction[]) { await runGas('saveOutputBatch', outputs); await this.fetchAll(); },
   async saveClosing(closing: DailyClosing) { await runGas('saveClosing', closing); await this.fetchAll(); },

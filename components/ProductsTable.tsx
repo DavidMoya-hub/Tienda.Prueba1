@@ -14,6 +14,9 @@ const ProductsTable: React.FC = () => {
 
   useEffect(() => {
     setProducts(dataService.getProducts());
+    return dataService.subscribe(() => {
+      setProducts(dataService.getProducts());
+    });
   }, []);
 
   const filteredProducts = useMemo(() => {

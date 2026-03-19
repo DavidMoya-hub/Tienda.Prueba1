@@ -12,6 +12,11 @@ const Restock: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [isSearching, setIsSearching] = useState(false);
+  const [, setUpdateCount] = useState(0); // Para forzar re-renderizado
+  
+  React.useEffect(() => {
+    return dataService.subscribe(() => setUpdateCount(c => c + 1));
+  }, []);
   
   const products = dataService.getProducts();
   const envelopes = dataService.getEnvelopes();
@@ -82,13 +87,17 @@ const Restock: React.FC = () => {
         detailsJson: JSON.stringify(normalizedCart) 
       };
 
-      await dataService.saveRestockNote(note);
+      const result = await dataService.saveRestockNote(note);
       
-      // Limpieza de estado tras éxito confirmado
-      setCart([]); 
-      setProvider('');
-      setDate(new Date().toISOString().split('T')[0]);
-      alert("¡Compra registrada correctamente e inventario actualizado!");
+      if (result && result.success) {
+        // Limpieza de estado tras éxito confirmado
+        setCart([]); 
+        setProvider('');
+        setDate(new Date().toISOString().split('T')[0]);
+        alert("¡Compra registrada correctamente e inventario actualizado!");
+      } else {
+        throw new Error("El servidor no confirmó el éxito de la operación.");
+      }
     } catch (e) { 
       console.error("Error al registrar compra:", e);
       alert("Error al registrar la compra. Revisa la consola para más detalles."); 

@@ -59,10 +59,15 @@ const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    dataService.getDashboardData().then(res => {
-      setData(res);
-      setLoading(false);
-    });
+    const loadData = () => {
+      dataService.getDashboardData().then(res => {
+        setData(res);
+        setLoading(false);
+      });
+    };
+    
+    loadData();
+    return dataService.subscribe(loadData);
   }, []);
 
   if (loading) return (
