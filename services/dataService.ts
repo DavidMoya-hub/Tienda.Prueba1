@@ -1,6 +1,6 @@
 import { Product, InputTransaction, OutputTransaction, DailyClosing, PriceHistory, PurchaseNote, Envelope, EnvelopeWithdrawal } from "../types";
 
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzV6QvEFsN29MIVEQLN0YsPoXX59QP6yenlWBocG84r5UuxoGO2Ax0-7Q489AbgrzqUgA/exec";
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwZ_PqNHq2vtZsvlTjfAg1PhfU0cmcjNrEbK54q0aRU3AbmY8Av-8BtWgW-YxB67s3g/exec";
 
 // Proxy para evitar CORS en GET (Vercel/Local)
 const PROXY_URL = "https://api.allorigins.win/raw?url=";
