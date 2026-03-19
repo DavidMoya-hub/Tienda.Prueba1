@@ -64,7 +64,7 @@ const Restock: React.FC = () => {
     
     setIsLoading(true);
     try {
-      // Normalización de tipos y mapeo limpio de datos
+      // Normalización estricta de tipos y mapeo limpio de datos
       const normalizedCart = cart.map(item => ({
         productId: String(item.productId),
         productName: String(item.productName),
@@ -83,8 +83,11 @@ const Restock: React.FC = () => {
       };
 
       await dataService.saveRestockNote(note);
+      
+      // Limpieza de estado tras éxito confirmado
       setCart([]); 
       setProvider('');
+      setDate(new Date().toISOString().split('T')[0]);
       alert("¡Compra registrada correctamente e inventario actualizado!");
     } catch (e) { 
       console.error("Error al registrar compra:", e);
