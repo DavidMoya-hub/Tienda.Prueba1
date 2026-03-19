@@ -74,11 +74,17 @@ const Sidebar: React.FC<{ isOpen: boolean, onClose: () => void }> = ({ isOpen, o
 
 const App: React.FC = () => {
   const [initialLoaded, setInitialLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   useEffect(() => {
-    dataService.fetchAll().then(() => setInitialLoaded(true));
+    dataService.fetchAll()
+      .then(() => setInitialLoaded(true))
+      .catch(err => {
+        setError(err instanceof Error ? err.message : String(err));
+        setInitialLoaded(true);
+      });
   }, []);
 
   const handleSync = async () => {
@@ -94,6 +100,24 @@ const App: React.FC = () => {
       </div>
       <div className="text-3xl tracking-tighter">tiendita</div>
       <div className="text-blue-400 text-sm animate-pulse">Iniciando Bóveda Financiera...</div>
+    </div>
+  );
+
+  if (error) return (
+    <div className="flex flex-col h-screen items-center justify-center bg-blue-900 font-black text-white p-8 text-center space-y-6">
+      <div className="bg-red-600 p-6 rounded-[2.5rem] shadow-2xl shadow-red-900">
+        <X size={64} />
+      </div>
+      <div className="space-y-2">
+        <div className="text-3xl tracking-tighter uppercase">Error de Servidor</div>
+        <div className="text-blue-300 text-sm font-medium max-w-md mx-auto">{error}</div>
+      </div>
+      <button 
+        onClick={() => window.location.reload()}
+        className="bg-white text-blue-900 px-8 py-4 rounded-2xl font-black hover:bg-blue-50 transition-all active:scale-95 shadow-xl"
+      >
+        REINTENTAR CONEXIÓN
+      </button>
     </div>
   );
 

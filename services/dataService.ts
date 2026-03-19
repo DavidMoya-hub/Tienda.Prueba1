@@ -1,9 +1,6 @@
 import { Product, InputTransaction, OutputTransaction, DailyClosing, PriceHistory, PurchaseNote, Envelope, EnvelopeWithdrawal } from "../types";
 
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwZ_PqNHq2vtZsvlTjfAg1PhfU0cmcjNrEbK54q0aRU3AbmY8Av-8BtWgW-YxB67s3g/exec";
-
-// Proxy para evitar CORS en GET (Vercel/Local)
-const PROXY_URL = "https://api.allorigins.win/raw?url=";
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw5jUYHdQDTRCOzcbb0ZE0qXBDK63oe35185aHNy11QxicehhywWC9UXlsbkMWapY5zGg/exec";
 
 declare var google: any;
 
@@ -18,96 +15,39 @@ const runGas = async (action: string, data: any = null): Promise<any> => {
     });
   }
 
-  // Si no estamos en GAS, usamos fetch (Mock o Proxy)
-  if (process.env.NODE_ENV === 'development' && !APPS_SCRIPT_URL.includes('script.google.com')) {
-    return mockHandler(action, data);
-  }
-
-  // 2. Entorno Vercel / Local (Fetch API)
-  if (action.startsWith('get')) {
-    try {
-      const url = `${APPS_SCRIPT_URL}?action=${action}`;
-      const response = await fetch(PROXY_URL + encodeURIComponent(url));
-      const json = await response.json();
-      // allorigins.win devuelve { contents: "..." }
-      return json.contents ? JSON.parse(json.contents) : json;
-    } catch (error) {
-      console.warn(`Error en fetch vía proxy (${action}), intentando mock local...`, error);
-      return mockHandler(action, data);
-    }
-  }
-
-  // Para POST (Escritura)
+  // Entorno Vercel / Local (Fetch API Directo)
   try {
+    // Usamos POST para todas las peticiones para asegurar compatibilidad y evitar CORS con GET
     const response = await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
+      redirect: 'follow', // Obligatorio para Google Apps Script
       mode: 'cors',
       headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify({ action, data })
     });
-    return await response.json();
+
+    if (!response.ok) {
+      throw new Error(`Error de Servidor: ${response.status}`);
+    }
+
+    const text = await response.text();
+    
+    // Validación de JSON: Si recibimos HTML (un error de Google), lanzamos error
+    if (text.includes('<html') || text.includes('<!DOCTYPE html>')) {
+      throw new Error("Error de Servidor: Respuesta no válida (HTML)");
+    }
+
+    try {
+      const json = JSON.parse(text);
+      if (json && json.error) throw new Error(json.error);
+      return json;
+    } catch (e) {
+      if (e instanceof Error && e.message.startsWith("Error de Servidor")) throw e;
+      throw new Error("Error de Servidor: Respuesta no válida (No JSON)");
+    }
   } catch (error) {
-    console.warn(`Error en fetch directo (${action}), intentando mock local...`, error);
-    return mockHandler(action, data);
-  }
-};
-
-const mockHandler = (action: string, data: any): any => {
-  const getStorage = (key: string) => JSON.parse(localStorage.getItem(key) || '[]');
-  const setStorage = (key: string, val: any) => localStorage.setItem(key, JSON.stringify(val));
-
-  switch (action) {
-    case 'getProducts': return getStorage('products');
-    case 'getEnvelopes': 
-      const envs = getStorage('envelopes');
-      if (envs.length === 0) {
-        const initial = [
-          { id: 'ENV1', name: 'Sobre 1 - Operativo', balance: 0, description: 'Gastos', lastResetDate: new Date().toISOString() },
-          { id: 'ENV2', name: 'Sobre 2 - Ahorro', balance: 0, description: 'Fondo', lastResetDate: new Date().toISOString() },
-          { id: 'ENV3', name: 'Sobre 3 - Ganancia', balance: 0, description: 'Personal', lastResetDate: new Date().toISOString() },
-          { id: 'ENV4', name: 'Sobre 4 - Capital', balance: 0, description: 'Resurtido', lastResetDate: new Date().toISOString() }
-        ];
-        setStorage('envelopes', initial);
-        return initial;
-      }
-      return envs;
-    case 'getInputs': return getStorage('inputs');
-    case 'getOutputs': return getStorage('outputs');
-    case 'getClosings': return getStorage('closings');
-    case 'getPurchaseNotes': return getStorage('purchaseNotes');
-    case 'getEnvelopeHistory': return getStorage('envelopeHistory');
-    case 'getPriceHistory': return getStorage('priceHistory');
-    
-    case 'saveProduct':
-      const products = getStorage('products');
-      const idx = products.findIndex((p: any) => p.id === data.id);
-      if (idx > -1) products[idx] = data; else products.push(data);
-      setStorage('products', products);
-      return { success: true };
-    
-    case 'saveOutputBatch':
-      const outputs = getStorage('outputs');
-      const currentProducts = getStorage('products');
-      data.forEach((o: any) => {
-        outputs.push(o);
-        const p = currentProducts.find((p: any) => p.id === o.productId);
-        if (p) {
-          p.stock -= o.quantity;
-          p.totalOutputs = (p.totalOutputs || 0) + o.quantity;
-          p.totalEarned = (p.totalEarned || 0) + (o.totalSale - (o.quantity * p.costPrice));
-        }
-      });
-      setStorage('outputs', outputs);
-      setStorage('products', currentProducts);
-      return { success: true };
-
-    case 'saveClosing':
-      const closings = getStorage('closings');
-      closings.push(data);
-      setStorage('closings', closings);
-      return { success: true };
-
-    default: return { success: true };
+    console.error(`Error en fetch directo (${action}):`, error);
+    throw error; // Reportar el error, no usar mock
   }
 };
 
@@ -148,7 +88,10 @@ export const dataService = {
       this._outputs = (outputs || []).map((o: any) => ({ ...o, type: 'exit', notes: o.notes || '' }));
       this._closings = closings || [];
       this._priceHistory = priceHistory || [];
-    } catch (e) { console.error("Error en fetchAll:", e); }
+    } catch (e) { 
+      console.error("Error en fetchAll:", e);
+      throw e; // Propagar el error para que la UI pueda reportarlo
+    }
   },
 
   getProducts() { return this._products; },
