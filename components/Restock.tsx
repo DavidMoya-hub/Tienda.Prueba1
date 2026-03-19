@@ -64,11 +64,34 @@ const Restock: React.FC = () => {
     
     setIsLoading(true);
     try {
-      const note: PurchaseNote = { id: 'NOTE-' + Math.random().toString(36).substr(2, 9).toUpperCase(), date: new Date(date).toISOString(), provider: provider || 'Proveedor Gral', totalAmount: total, status, detailsJson: JSON.stringify(cart) };
+      // Normalización de tipos y mapeo limpio de datos
+      const normalizedCart = cart.map(item => ({
+        productId: String(item.productId),
+        productName: String(item.productName),
+        quantity: Number(item.quantity),
+        unitCost: Number(item.unitCost),
+        totalCost: Number(item.totalCost)
+      }));
+
+      const note: PurchaseNote = { 
+        id: 'NOTE-' + Math.random().toString(36).substr(2, 9).toUpperCase(), 
+        date: new Date(date).toISOString(), 
+        provider: provider || 'Proveedor Gral', 
+        totalAmount: Number(total), 
+        status, 
+        detailsJson: JSON.stringify(normalizedCart) 
+      };
+
       await dataService.saveRestockNote(note);
-      setCart([]); setProvider('');
-      alert("¡Compra registrada correctamente!");
-    } catch (e) { alert("Error al registrar"); } finally { setIsLoading(false); }
+      setCart([]); 
+      setProvider('');
+      alert("¡Compra registrada correctamente e inventario actualizado!");
+    } catch (e) { 
+      console.error("Error al registrar compra:", e);
+      alert("Error al registrar la compra. Revisa la consola para más detalles."); 
+    } finally { 
+      setIsLoading(false); 
+    }
   };
 
   const grandTotal = cart.reduce((acc, item) => acc + item.totalCost, 0);
@@ -138,32 +161,34 @@ const Restock: React.FC = () => {
             </h3>
             <span className="text-[8px] md:text-[10px] font-black text-blue-400 uppercase">{cart.length} artículos</span>
           </div>
-          {cart.map(item => (
-            <div key={item.productId} className="p-4 md:p-8 flex flex-col sm:flex-row sm:items-center justify-between hover:bg-slate-50/50 transition-colors group gap-3 md:gap-4">
-              <div className="flex-1">
-                <p className="font-black text-base md:text-xl text-slate-800">{item.productName}</p>
-                <div className="flex items-center gap-4 mt-1">
-                  <span className="text-[10px] md:text-xs font-bold text-slate-400 flex items-center gap-1"><Tag size={10} className="md:w-3 md:h-3"/> ${item.unitCost} c/u</span>
+          <div className="max-h-[500px] overflow-y-auto custom-scrollbar divide-y divide-blue-50">
+            {cart.map(item => (
+              <div key={item.productId} className="p-4 md:p-8 flex flex-col sm:flex-row sm:items-center justify-between hover:bg-slate-50/50 transition-colors group gap-3 md:gap-4">
+                <div className="flex-1">
+                  <p className="font-black text-base md:text-xl text-slate-800">{item.productName}</p>
+                  <div className="flex items-center gap-4 mt-1">
+                    <span className="text-[10px] md:text-xs font-bold text-slate-400 flex items-center gap-1"><Tag size={10} className="md:w-3 md:h-3"/> ${item.unitCost} c/u</span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between sm:justify-end space-x-4 md:space-x-8">
+                  <div className="flex items-center bg-blue-50 rounded-lg md:rounded-2xl p-0.5 md:p-1 border border-blue-100">
+                    <input type="number" min="1" value={item.quantity} onChange={(e) => {
+                      const val = parseInt(e.target.value) || 1;
+                      setCart(cart.map(i => i.productId === item.productId ? {...i, quantity: val, totalCost: val * i.unitCost} : i));
+                    }} className="w-12 md:w-20 p-1.5 md:p-3 bg-white rounded md:rounded-xl text-center font-black text-blue-600 focus:outline-none text-xs md:text-base" />
+                  </div>
+                  <span className="text-lg md:text-2xl font-black text-slate-900 w-20 md:w-32 text-right tracking-tighter">${item.totalCost.toFixed(2)}</span>
+                  <button onClick={() => setCart(cart.filter(i => i.productId !== item.productId))} className="text-slate-300 hover:text-red-500 transition-all"><Trash2 className="md:w-6 md:h-6" size={18} /></button>
                 </div>
               </div>
-              <div className="flex items-center justify-between sm:justify-end space-x-4 md:space-x-8">
-                <div className="flex items-center bg-blue-50 rounded-lg md:rounded-2xl p-0.5 md:p-1 border border-blue-100">
-                  <input type="number" min="1" value={item.quantity} onChange={(e) => {
-                    const val = parseInt(e.target.value) || 1;
-                    setCart(cart.map(i => i.productId === item.productId ? {...i, quantity: val, totalCost: val * i.unitCost} : i));
-                  }} className="w-12 md:w-20 p-1.5 md:p-3 bg-white rounded md:rounded-xl text-center font-black text-blue-600 focus:outline-none text-xs md:text-base" />
-                </div>
-                <span className="text-lg md:text-2xl font-black text-slate-900 w-20 md:w-32 text-right tracking-tighter">${item.totalCost.toFixed(2)}</span>
-                <button onClick={() => setCart(cart.filter(i => i.productId !== item.productId))} className="text-slate-300 hover:text-red-500 transition-all"><Trash2 className="md:w-6 md:h-6" size={18} /></button>
+            ))}
+            {cart.length === 0 && (
+              <div className="py-16 md:py-24 text-center space-y-4">
+                <ShoppingCart className="mx-auto text-blue-100 md:w-16 md:h-16" size={48} />
+                <p className="text-blue-300 font-black italic text-lg md:text-xl">Tu lista de compra está vacía.</p>
               </div>
-            </div>
-          ))}
-          {cart.length === 0 && (
-            <div className="py-16 md:py-24 text-center space-y-4">
-              <ShoppingCart className="mx-auto text-blue-100 md:w-16 md:h-16" size={48} />
-              <p className="text-blue-300 font-black italic text-lg md:text-xl">Tu lista de compra está vacía.</p>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
 
