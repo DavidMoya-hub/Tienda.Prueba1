@@ -1,6 +1,6 @@
 import { Product, InputTransaction, OutputTransaction, DailyClosing, PriceHistory, PurchaseNote, Envelope, EnvelopeWithdrawal } from "../types";
 
-const API_URL = "/api/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbwuIun4eajmCiwJOV_LkaToNPhSwUVLfV4PgcJX2Khb3zX8N5shdTP2u5FLvpv2wJJdqA/exec";
 
 declare var google: any;
 
@@ -17,11 +17,11 @@ const runGas = async (action: string, data: any = null): Promise<any> => {
 
   // Entorno Vercel / Local (Fetch API Directo)
   try {
-    const fullUrl = window.location.origin + API_URL;
-    console.log(`[Fetch] Calling ${action} at ${fullUrl}`);
     const response = await fetch(API_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      redirect: 'follow',
+      mode: 'cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({ action, data })
     });
 
