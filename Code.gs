@@ -218,7 +218,7 @@ function processPhysicalCount(counts, shift) {
   const headers = prodData[0];
   
   const idIdx = 0;
-  const stockIdx = headers.indexOf("stock");
+  const stockIdx = headers.indexOf("CANT EXT") !== -1 ? headers.indexOf("CANT EXT") : headers.indexOf("stock");
   const costIdx = headers.indexOf("costPrice");
   const saleIdx = headers.indexOf("salePrice");
   const earnedIdx = headers.indexOf("totalEarned");
@@ -260,7 +260,7 @@ function processPhysicalCount(counts, shift) {
             "exit"
           ]);
           
-          prodSheet.getRange(i + 1, stockIdx + 1).setValue(phyStock);
+          prodSheet.getRange(i + 1, stockIdx + 1).setValue(Number(phyStock));
           const currentEarned = parseAmount(prodData[i][earnedIdx]);
           prodSheet.getRange(i + 1, earnedIdx + 1).setValue(currentEarned + itemProfit);
           const currentOuts = parseAmount(prodData[i][outsIdx]);
@@ -321,25 +321,48 @@ function savePurchaseNote(note) {
 function updateProductStock(productId, quantity, amount, isInput) {
   const sheet = getSheet("Products");
   const data = sheet.getDataRange().getValues();
+  if (data.length <= 1) return false;
+  
   const headers = data[0];
   const idIdx = 0;
+  
+  // Buscamos las columnas con seguridad
   const stockIdx = headers.indexOf("stock");
   const investedIdx = headers.indexOf("totalInvested");
-  const inputsIdx = headers.indexOf("totalInputs");
+  const inputsIdx = headers.indexOf("totalInputs"); // Si no existe, será -1
+  const outsIdx = headers.indexOf("totalOutputs");  // Si no existe, será -1
   
   const searchId = productId.toString().trim().toUpperCase();
+  
   for (let i = 1; i < data.length; i++) {
     if (data[i][idIdx].toString().trim().toUpperCase() === searchId) {
-      const currentStock = parseAmount(data[i][stockIdx]);
-      const currentInvested = parseAmount(data[i][investedIdx]);
-      const currentInputs = parseAmount(data[i][inputsIdx]);
       
-      if (isInput) {
-        sheet.getRange(i + 1, stockIdx + 1).setValue(currentStock + quantity);
-        sheet.getRange(i + 1, investedIdx + 1).setValue(currentInvested + amount);
-        sheet.getRange(i + 1, inputsIdx + 1).setValue(currentInputs + quantity);
+      let finalStock = 0;
+      // 1. Actualizar el Stock Principal (Solo si la columna existe)
+      if (stockIdx > -1) {
+        const currentStock = parseAmount(data[i][stockIdx]);
+        finalStock = isInput ? currentStock + quantity : currentStock - quantity;
+        sheet.getRange(i + 1, stockIdx + 1).setValue(finalStock);
       }
-      return true;
+      
+      // 2. Actualizar Estadísticas (Ignora las columnas si no las creaste en tu Excel)
+      if (isInput) {
+        if (investedIdx > -1) {
+          const currentInvested = parseAmount(data[i][investedIdx]);
+          sheet.getRange(i + 1, investedIdx + 1).setValue(currentInvested + amount);
+        }
+        if (inputsIdx > -1) {
+          const currentInputs = parseAmount(data[i][inputsIdx]);
+          sheet.getRange(i + 1, inputsIdx + 1).setValue(currentInputs + quantity);
+        }
+      } else {
+        if (outsIdx > -1) {
+           const currentOuts = parseAmount(data[i][outsIdx]);
+           sheet.getRange(i + 1, outsIdx + 1).setValue(currentOuts + quantity);
+        }
+      }
+      
+      return { success: true, currentStock: finalStock };
     }
   }
   return false;
@@ -376,7 +399,7 @@ function saveOutputBatch(outputs) {
   const prodSheet = getSheet("Products");
   const prodData = prodSheet.getDataRange().getValues();
   const headers = prodData[0];
-  const stockIdx = headers.indexOf("stock");
+  const stockIdx = headers.indexOf("CANT EXT") !== -1 ? headers.indexOf("CANT EXT") : headers.indexOf("stock");
   const earnedIdx = headers.indexOf("totalEarned");
   const costIdx = headers.indexOf("costPrice");
   const outsIdx = headers.indexOf("totalOutputs");
@@ -410,7 +433,7 @@ function saveOutputBatch(outputs) {
         totalProfit += itemProfit;
         
         const currentStock = parseAmount(prodData[i][stockIdx]);
-        prodSheet.getRange(i + 1, stockIdx + 1).setValue(currentStock - parseAmount(o.quantity));
+        prodSheet.getRange(i + 1, stockIdx + 1).setValue(Number(currentStock - parseAmount(o.quantity)));
         const currentEarned = parseAmount(prodData[i][earnedIdx]);
         prodSheet.getRange(i + 1, earnedIdx + 1).setValue(currentEarned + itemProfit);
         const currentOuts = parseAmount(prodData[i][outsIdx]);
@@ -468,7 +491,8 @@ function getSheetData(name) {
     headers.forEach((h, i) => {
       let val = row[i];
       if (val instanceof Date) val = val.toISOString();
-      obj[h] = val;
+      let key = h === "CANT EXT" ? "stock" : h;
+      obj[key] = val;
     });
     return obj;
   });

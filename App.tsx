@@ -4,7 +4,7 @@ import { HashRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, Package, PlusCircle, History, 
   RefreshCcw, ClipboardCheck, Wallet, Store,
-  Coins, List, Menu, X
+  Coins, List, Menu, X, Calculator
 } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import Inventory from './components/Inventory';
@@ -13,6 +13,7 @@ import Restock from './components/Restock';
 import DailyInventoryCount from './components/DailyInventoryCount';
 import HistoryView from './components/HistoryView';
 import EnvelopesManager from './components/EnvelopesManager';
+import DailyClosingView from './components/DailyClosingView';
 import ProductsTable from './components/ProductsTable';
 import { dataService } from './services/dataService';
 
@@ -58,6 +59,7 @@ const Sidebar: React.FC<{ isOpen: boolean, onClose: () => void }> = ({ isOpen, o
       <nav className="flex-1 p-5 space-y-2 overflow-y-auto custom-scrollbar">
         <NavItem to="/" icon={<LayoutDashboard size={20} />} label="Dashboard" onClick={onClose} />
         <NavItem to="/products" icon={<List size={20} />} label="Productos" onClick={onClose} />
+        <NavItem to="/closing" icon={<Calculator size={20} />} label="Corte de Caja" onClick={onClose} />
         <NavItem to="/count" icon={<ClipboardCheck size={20} />} label="Inventario Físico" onClick={onClose} />
         <NavItem to="/envelopes" icon={<Coins size={20} />} label="Sobres" onClick={onClose} />
         <NavItem to="/inventory" icon={<Package size={20} />} label="Inventario" onClick={onClose} />
@@ -149,6 +151,7 @@ const App: React.FC = () => {
           <div className="p-4 md:p-8 max-w-7xl mx-auto">
             <Routes>
               <Route path="/" element={<Dashboard />} />
+              <Route path="/closing" element={<DailyClosingView />} />
               <Route path="/products" element={<ProductsTable />} />
               <Route path="/count" element={<DailyInventoryCount />} />
               <Route path="/envelopes" element={<EnvelopesManager />} />

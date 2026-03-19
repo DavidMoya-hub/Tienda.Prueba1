@@ -4,7 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   PieChart, Pie, Cell 
 } from 'recharts';
-import { Wallet, PiggyBank, ArrowRight, TrendingUp, ShoppingBag, DollarSign, RefreshCw, Store } from 'lucide-react';
+import { Wallet, PiggyBank, ArrowRight, TrendingUp, ShoppingBag, DollarSign, RefreshCw, Store, PlusCircle } from 'lucide-react';
 import { dataService } from '../services/dataService';
 
 const PIE_COLORS = ['#dc2626', '#2563eb']; // Red-600 and Blue-600
@@ -55,6 +55,7 @@ const StatCard: React.FC<{ envelope: any, index: number }> = ({ envelope, index 
 };
 
 const Dashboard: React.FC = () => {
+  const navigate = useNavigate();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -92,6 +93,67 @@ const Dashboard: React.FC = () => {
         {data?.envelopes.map((env: any, idx: number) => (
           <StatCard key={env.id} envelope={env} index={idx} />
         ))}
+      </div>
+
+      {/* Acciones Rápidas */}
+      <div className="bg-white p-6 md:p-8 rounded-2xl md:rounded-[2.5rem] border border-blue-50 shadow-xl shadow-slate-200/50">
+        <h3 className="text-lg md:text-xl font-black text-slate-800 mb-6 flex items-center space-x-2">
+          <RefreshCw className="text-blue-600 md:w-6 md:h-6" size={20} />
+          <span>Acciones Rápidas</span>
+        </h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <button 
+            onClick={() => navigate('/restock')}
+            className="flex items-center justify-between p-4 bg-indigo-50 rounded-2xl border border-indigo-100 hover:bg-indigo-100 transition-all group"
+          >
+            <div className="flex items-center space-x-3">
+              <div className="bg-indigo-600 text-white p-2 rounded-xl">
+                <RefreshCw size={20} />
+              </div>
+              <span className="font-black text-indigo-900 text-sm">Resurtido</span>
+            </div>
+            <ArrowRight size={18} className="text-indigo-400 group-hover:translate-x-1 transition-transform" />
+          </button>
+          
+          <button 
+            onClick={() => navigate('/count')}
+            className="flex items-center justify-between p-4 bg-red-50 rounded-2xl border border-red-100 hover:bg-red-100 transition-all group"
+          >
+            <div className="flex items-center space-x-3">
+              <div className="bg-red-600 text-white p-2 rounded-xl">
+                <ShoppingBag size={20} />
+              </div>
+              <span className="font-black text-red-900 text-sm">Inv. Físico</span>
+            </div>
+            <ArrowRight size={18} className="text-red-400 group-hover:translate-x-1 transition-transform" />
+          </button>
+
+          <button 
+            onClick={() => navigate('/register')}
+            className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:bg-slate-100 transition-all group"
+          >
+            <div className="flex items-center space-x-3">
+              <div className="bg-slate-900 text-white p-2 rounded-xl">
+                <PlusCircle size={20} />
+              </div>
+              <span className="font-black text-slate-900 text-sm">Nuevo Producto</span>
+            </div>
+            <ArrowRight size={18} className="text-slate-400 group-hover:translate-x-1 transition-transform" />
+          </button>
+
+          <button 
+            onClick={() => navigate('/envelopes')}
+            className="flex items-center justify-between p-4 bg-emerald-50 rounded-2xl border border-emerald-100 hover:bg-emerald-100 transition-all group"
+          >
+            <div className="flex items-center space-x-3">
+              <div className="bg-emerald-600 text-white p-2 rounded-xl">
+                <Wallet size={20} />
+              </div>
+              <span className="font-black text-emerald-900 text-sm">Ver Sobres</span>
+            </div>
+            <ArrowRight size={18} className="text-emerald-400 group-hover:translate-x-1 transition-transform" />
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">

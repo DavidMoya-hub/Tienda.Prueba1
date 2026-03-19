@@ -1,9 +1,16 @@
 import React, { useState, useMemo } from 'react';
 import { Calendar, ArrowUpCircle, ArrowDownCircle, Search, ClipboardList, Wallet, CheckCircle, Clock, AlertCircle } from 'lucide-react';
 import { dataService } from '../services/dataService';
+import Modal from './Modal';
 
 const HistoryView: React.FC = () => {
   const [tab, setTab] = useState<'Inputs' | 'Outputs' | 'Audit' | 'Debts'>('Inputs');
+  const [modal, setModal] = useState<{ isOpen: boolean; title: string; message: string; type: 'confirm' | 'info'; onConfirm?: () => void }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'info'
+  });
   const inputs = dataService.getInputs();
   const outputs = dataService.getOutputs();
   const closings = dataService.getClosings();
@@ -18,10 +25,20 @@ const HistoryView: React.FC = () => {
     return all.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [inputs, outputs]);
 
-  const handleMarkAsPaid = async (noteId: string) => {
-    if (confirm("¿Marcar esta nota como PAGADA? Se usará el capital del Sobre 4.")) {
-      await dataService.updateNoteStatus(noteId, 'Paid');
-    }
+  const handleMarkAsPaid = (noteId: string) => {
+    setModal({
+      isOpen: true,
+      title: 'Liquidar Nota',
+      message: '¿Marcar esta nota como PAGADA? Se usará el capital del Sobre 4.',
+      type: 'confirm',
+      onConfirm: async () => {
+        try {
+          await dataService.updateNoteStatus(noteId, 'Paid');
+        } catch (error) {
+          console.error('Error updating note status:', error);
+        }
+      }
+    });
   };
 
   const pendingDebts = useMemo(() => {
@@ -219,6 +236,14 @@ const HistoryView: React.FC = () => {
           </div>
         )}
       </div>
+      <Modal 
+        isOpen={modal.isOpen}
+        onClose={() => setModal({ ...modal, isOpen: false })}
+        title={modal.title}
+        message={modal.message}
+        type={modal.type}
+        onConfirm={modal.onConfirm}
+      />
     </div>
   );
 };

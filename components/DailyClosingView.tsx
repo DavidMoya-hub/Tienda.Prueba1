@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { DollarSign, Tag, Calculator, Save, Check, ArrowRightCircle, CreditCard, Wallet } from 'lucide-react';
+import { DollarSign, Tag, Calculator, Save, Check, ArrowRightCircle, CreditCard, Wallet, X, PlusCircle, Minus, Plus } from 'lucide-react';
 import { dataService } from '../services/dataService';
 
 const DailyClosingView: React.FC = () => {
@@ -9,6 +9,15 @@ const DailyClosingView: React.FC = () => {
   const [shift, setShift] = useState('Day');
   const [saved, setSaved] = useState(false);
 
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const filteredProducts = useMemo(() => {
+    return products.filter(p => 
+      p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      p.code.toLowerCase().includes(searchTerm.toLowerCase())
+    ).slice(0, 10);
+  }, [products, searchTerm]);
+
   // Calculate supplier payments made TODAY
   const todayPayments = useMemo(() => {
     const today = new Date().toISOString().split('T')[0];
@@ -17,13 +26,10 @@ const DailyClosingView: React.FC = () => {
       .reduce((acc, note) => acc + (Number(note.totalAmount) || 0), 0);
   }, [purchaseNotes]);
 
-  const addSaleItem = (productId: string, quantity: number) => {
-    const product = products.find(p => p.id === productId);
-    if (!product) return;
-
+  const addSaleItem = (product: any, quantity: number) => {
     setSalesItems([...salesItems, {
       id: Math.random().toString(36).substr(2, 9),
-      productId,
+      productId: product.id,
       name: product.name,
       quantity,
       salePrice: product.salePrice,
@@ -31,6 +37,22 @@ const DailyClosingView: React.FC = () => {
       totalSale: product.salePrice * quantity,
       totalCost: product.costPrice * quantity
     }]);
+    setSearchTerm('');
+  };
+
+  const updateQuantity = (id: string, delta: number) => {
+    setSalesItems(salesItems.map(item => {
+      if (item.id === id) {
+        const newQty = Math.max(1, item.quantity + delta);
+        return {
+          ...item,
+          quantity: newQty,
+          totalSale: item.salePrice * newQty,
+          totalCost: item.costPrice * newQty
+        };
+      }
+      return item;
+    }));
   };
 
   const handleClosing = () => {
@@ -49,7 +71,7 @@ const DailyClosingView: React.FC = () => {
       totalSale: item.totalSale,
       date: new Date().toISOString(),
       shift,
-      notes: '', // Se puede expandir para permitir notas por item
+      notes: '', 
       type: 'exit'
     }));
 
@@ -104,26 +126,56 @@ const DailyClosingView: React.FC = () => {
             </h3>
             <div className="space-y-4">
               <div className="relative">
-                <select 
-                  onChange={(e) => {
-                    if (e.target.value) addSaleItem(e.target.value, 1);
-                    e.target.value = "";
-                  }}
+                <input 
+                  type="text"
+                  placeholder="Buscar producto por nombre o código..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full p-3 md:p-4 bg-slate-50 border-2 border-slate-100 rounded-xl md:rounded-2xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-slate-700 text-xs md:text-base"
-                >
-                  <option value="">Selecciona un producto para vender...</option>
-                  {products.map(p => (
-                    <option key={p.id} value={p.id}>{p.name} - ${p.salePrice} (Stock: {p.stock})</option>
-                  ))}
-                </select>
+                />
+                
+                {searchTerm && (
+                  <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 overflow-hidden">
+                    {filteredProducts.map(p => (
+                      <button
+                        key={p.id}
+                        onClick={() => addSaleItem(p, 1)}
+                        className="w-full p-4 text-left hover:bg-blue-50 flex justify-between items-center border-b border-slate-50 last:border-0 transition-colors"
+                      >
+                        <div>
+                          <span className="font-black text-slate-800 block text-sm">{p.name}</span>
+                          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Stock: {p.stock} • ${p.salePrice}</span>
+                        </div>
+                        <PlusCircle className="text-blue-500" size={20} />
+                      </button>
+                    ))}
+                    {filteredProducts.length === 0 && (
+                      <div className="p-4 text-center text-slate-400 font-medium italic">No se encontraron productos.</div>
+                    )}
+                  </div>
+                )}
               </div>
               
               <div className="space-y-3 max-h-[300px] md:max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                 {salesItems.map((item, idx) => (
                   <div key={idx} className="flex items-center justify-between p-3 md:p-4 bg-white rounded-xl md:rounded-2xl border border-slate-100 shadow-sm hover:border-blue-200 transition-all group">
                     <div className="flex items-center space-x-3 md:space-x-4">
-                      <div className="bg-blue-600 text-white w-8 h-8 md:w-10 md:h-10 rounded-lg md:rounded-xl flex items-center justify-center font-black text-xs md:text-sm shadow-lg shadow-blue-200">
-                        {item.quantity}
+                      <div className="flex items-center bg-blue-50 rounded-xl border border-blue-100 p-1">
+                        <button 
+                          onClick={() => updateQuantity(item.id, -1)}
+                          className="p-1 hover:bg-white rounded-lg transition-colors text-blue-600"
+                        >
+                          <Minus size={14} />
+                        </button>
+                        <div className="w-8 text-center font-black text-blue-900 text-sm">
+                          {item.quantity}
+                        </div>
+                        <button 
+                          onClick={() => updateQuantity(item.id, 1)}
+                          className="p-1 hover:bg-white rounded-lg transition-colors text-blue-600"
+                        >
+                          <Plus size={14} />
+                        </button>
                       </div>
                       <div>
                         <span className="font-bold text-slate-800 block text-xs md:text-base">{item.name}</span>
@@ -136,7 +188,7 @@ const DailyClosingView: React.FC = () => {
                         onClick={() => setSalesItems(salesItems.filter((_, i) => i !== idx))}
                         className="text-slate-300 hover:text-red-500 transition-colors"
                       >
-                        <Tag size={16} className="md:w-[18px] md:h-[18px]" />
+                        <X size={16} className="md:w-[18px] md:h-[18px]" />
                       </button>
                     </div>
                   </div>
@@ -144,7 +196,7 @@ const DailyClosingView: React.FC = () => {
                 {salesItems.length === 0 && (
                   <div className="py-16 md:py-20 text-center space-y-3">
                     <Calculator className="mx-auto text-slate-200 md:w-12 md:h-12" size={40} />
-                    <p className="text-slate-400 font-medium italic text-xs md:text-base">Agrega productos vendidos durante el turno.</p>
+                    <p className="text-slate-400 font-medium italic text-xs md:text-base">Busca y agrega productos vendidos durante el turno.</p>
                   </div>
                 )}
               </div>

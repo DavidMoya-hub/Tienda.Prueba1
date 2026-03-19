@@ -3,6 +3,7 @@ import React, { useState, useMemo, useRef } from 'react';
 import { Save, Calculator, CheckCircle2, Wallet, ArrowRight, RefreshCcw, Search, AlertCircle, Store, Camera, Loader2, Image as ImageIcon } from 'lucide-react';
 import { dataService } from '../services/dataService';
 import { processInventoryImage } from '../services/geminiService';
+import Modal from './Modal';
 
 const DailyInventoryCount: React.FC = () => {
   const products = dataService.getProducts();
@@ -14,6 +15,12 @@ const DailyInventoryCount: React.FC = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [summary, setSummary] = useState<any>(null);
   const [showDebtModal, setShowDebtModal] = useState(false);
+  const [modal, setModal] = useState<{ isOpen: boolean; title: string; message: string; type: 'info' | 'success' | 'warning' | 'error' | 'confirm'; onConfirm?: () => void }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'info'
+  });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const filteredProducts = useMemo(() => {
@@ -63,12 +70,27 @@ const DailyInventoryCount: React.FC = () => {
 
         setCounts(newCounts);
         if (matchCount > 0) {
-          alert(`Se detectaron y mapearon ${matchCount} productos desde la imagen.`);
+          setModal({
+            isOpen: true,
+            title: 'OCR Exitoso',
+            message: `Se detectaron y mapearon ${matchCount} productos desde la imagen.`,
+            type: 'success'
+          });
         } else {
-          alert("No se encontraron coincidencias exactas de productos en la imagen.");
+          setModal({
+            isOpen: true,
+            title: 'Sin Coincidencias',
+            message: "No se encontraron coincidencias exactas de productos en la imagen.",
+            type: 'warning'
+          });
         }
-      } catch (err) {
-        alert("Error procesando imagen de inventario: " + err);
+      } catch (err: any) {
+        setModal({
+          isOpen: true,
+          title: 'Error OCR',
+          message: "Error procesando imagen de inventario: " + err.message,
+          type: 'error'
+        });
       } finally {
         setIsUploading(false);
       }
@@ -77,7 +99,15 @@ const DailyInventoryCount: React.FC = () => {
   };
 
   const processClosing = async () => {
-    if (Object.keys(counts).length === 0) return alert("Ingresa al menos un conteo físico.");
+    if (Object.keys(counts).length === 0) {
+      setModal({
+        isOpen: true,
+        title: 'Atención',
+        message: "Ingresa al menos un conteo físico.",
+        type: 'warning'
+      });
+      return;
+    }
     
     setIsProcessing(true);
     try {
@@ -85,16 +115,35 @@ const DailyInventoryCount: React.FC = () => {
       const res = await dataService.processPhysicalCount(payload, 'Daily Count');
       setSummary(res);
       if (pendingNotes.length > 0) setShowDebtModal(true);
-    } catch (e) {
-      alert("Error procesando el cierre.");
+    } catch (e: any) {
+      setModal({
+        isOpen: true,
+        title: 'Error',
+        message: "Error procesando el cierre: " + e.message,
+        type: 'error'
+      });
     } finally {
       setIsProcessing(false);
     }
   };
 
   const payNote = async (id: string) => {
-    await dataService.updateNoteStatus(id, 'Paid');
-    alert("Nota pagada con éxito");
+    try {
+      await dataService.updateNoteStatus(id, 'Paid');
+      setModal({
+        isOpen: true,
+        title: 'Éxito',
+        message: "Nota pagada con éxito",
+        type: 'success'
+      });
+    } catch (error: any) {
+      setModal({
+        isOpen: true,
+        title: 'Error',
+        message: "Error al pagar la nota: " + error.message,
+        type: 'error'
+      });
+    }
   };
 
   if (summary) {
@@ -290,6 +339,14 @@ const DailyInventoryCount: React.FC = () => {
           </button>
         </div>
       </div>
+      <Modal 
+        isOpen={modal.isOpen}
+        onClose={() => setModal({ ...modal, isOpen: false })}
+        title={modal.title}
+        message={modal.message}
+        type={modal.type}
+        onConfirm={modal.onConfirm}
+      />
     </div>
   );
 };

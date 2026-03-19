@@ -2,10 +2,17 @@ import React, { useState } from 'react';
 import { Search, Filter, Download, Edit2, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { dataService } from '../services/dataService';
+import Modal from './Modal';
 
 const Inventory: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [, setUpdateCount] = useState(0);
+  const [modal, setModal] = useState<{ isOpen: boolean; title: string; message: string; type: 'confirm' | 'info'; onConfirm?: () => void }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'info'
+  });
   const navigate = useNavigate();
 
   React.useEffect(() => {
@@ -19,10 +26,20 @@ const Inventory: React.FC = () => {
     p.code?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleDelete = async (id: string, name: string) => {
-    if (confirm(`¿Estás seguro de eliminar "${name}"? Esta acción no se puede deshacer.`)) {
-      await dataService.deleteProduct(id);
-    }
+  const handleDelete = (id: string, name: string) => {
+    setModal({
+      isOpen: true,
+      title: 'Eliminar Producto',
+      message: `¿Estás seguro de eliminar "${name}"? Esta acción no se puede deshacer.`,
+      type: 'confirm',
+      onConfirm: async () => {
+        try {
+          await dataService.deleteProduct(id);
+        } catch (error) {
+          console.error('Error deleting product:', error);
+        }
+      }
+    });
   };
 
   const handleEdit = (product: any) => {
@@ -134,6 +151,14 @@ const Inventory: React.FC = () => {
           </table>
         </div>
       </div>
+      <Modal 
+        isOpen={modal.isOpen}
+        onClose={() => setModal({ ...modal, isOpen: false })}
+        title={modal.title}
+        message={modal.message}
+        type={modal.type}
+        onConfirm={modal.onConfirm}
+      />
     </div>
   );
 };

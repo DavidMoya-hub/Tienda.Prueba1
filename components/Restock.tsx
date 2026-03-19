@@ -3,6 +3,7 @@ import { ShoppingCart, Search, Trash2, Camera, Banknote, CheckCircle2, Package, 
 import { dataService } from '../services/dataService';
 import { processTicketWithGemini } from '../services/geminiService';
 import { Product, PurchaseNote } from '../types';
+import Modal from './Modal';
 
 const Restock: React.FC = () => {
   const [cart, setCart] = useState<any[]>([]);
@@ -13,6 +14,12 @@ const Restock: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [, setUpdateCount] = useState(0); // Para forzar re-renderizado
+  const [modal, setModal] = useState<{ isOpen: boolean; title: string; message: string; type: 'info' | 'success' | 'warning' | 'error' | 'confirm'; onConfirm?: () => void }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'info'
+  });
   
   React.useEffect(() => {
     return dataService.subscribe(() => setUpdateCount(c => c + 1));
@@ -55,7 +62,14 @@ const Restock: React.FC = () => {
           const match = products.find(p => p.code === result.code || p.name.toLowerCase().includes(result.name.toLowerCase()));
           if (match) addToCart(match, result.quantity);
         });
-      } catch (err) { alert("Error en OCR"); } finally { setIsLoading(false); }
+      } catch (err: any) { 
+        setModal({
+          isOpen: true,
+          title: 'Error OCR',
+          message: "Error en OCR: " + err.message,
+          type: 'error'
+        });
+      } finally { setIsLoading(false); }
     };
     reader.readAsDataURL(file);
   };
@@ -64,9 +78,20 @@ const Restock: React.FC = () => {
     if (cart.length === 0) return;
     const total = cart.reduce((acc, item) => acc + item.totalCost, 0);
     if (status === 'Paid' && capitalBalance < total) {
-      if (!confirm("El saldo del Sobre 4 es insuficiente. ¿Deseas continuar de todas formas?")) return;
+      setModal({
+        isOpen: true,
+        title: 'Saldo Insuficiente',
+        message: "El saldo del Sobre 4 es insuficiente. ¿Deseas continuar de todas formas?",
+        type: 'confirm',
+        onConfirm: () => performRestock(total)
+      });
+      return;
     }
     
+    performRestock(total);
+  };
+
+  const performRestock = async (total: number) => {
     setIsLoading(true);
     try {
       // Normalización estricta de tipos y mapeo limpio de datos
@@ -94,13 +119,23 @@ const Restock: React.FC = () => {
         setCart([]); 
         setProvider('');
         setDate(new Date().toISOString().split('T')[0]);
-        alert("¡Compra registrada correctamente e inventario actualizado!");
+        setModal({
+          isOpen: true,
+          title: 'Éxito',
+          message: "¡Compra registrada correctamente e inventario actualizado!",
+          type: 'success'
+        });
       } else {
         throw new Error("El servidor no confirmó el éxito de la operación.");
       }
-    } catch (e) { 
+    } catch (e: any) { 
       console.error("Error al registrar compra:", e);
-      alert("Error al registrar la compra. Revisa la consola para más detalles."); 
+      setModal({
+        isOpen: true,
+        title: 'Error',
+        message: "Error al registrar la compra: " + e.message,
+        type: 'error'
+      });
     } finally { 
       setIsLoading(false); 
     }
@@ -253,6 +288,14 @@ const Restock: React.FC = () => {
           </button>
         </div>
       </div>
+      <Modal 
+        isOpen={modal.isOpen}
+        onClose={() => setModal({ ...modal, isOpen: false })}
+        title={modal.title}
+        message={modal.message}
+        type={modal.type}
+        onConfirm={modal.onConfirm}
+      />
     </div>
   );
 };
