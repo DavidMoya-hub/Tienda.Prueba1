@@ -142,23 +142,12 @@ export const dataService = {
 
   async saveProduct(p: Product) {
     const res = await runGas('saveProduct', p);
-    if (res && (res.success || res.id)) {
-      const newProduct = res.data || (res.id ? res : p);
-      const index = this._products.findIndex(prod => prod.id === String(newProduct.id || p.id));
+    if (res && res.success) {
+      const index = this._products.findIndex(prod => prod.id === p.id);
       if (index !== -1) {
-        this._products[index] = { ...this._products[index], ...newProduct };
+        this._products = this._products.map(prod => prod.id === p.id ? { ...prod, ...p } : prod);
       } else {
-        this._products.push({
-          ...newProduct,
-          id: String(newProduct.id || ''),
-          costPrice: Number(newProduct.costPrice || 0),
-          salePrice: Number(newProduct.salePrice || 0),
-          stock: Number(newProduct.stock || 0),
-          totalInvested: Number(newProduct.totalInvested || 0),
-          totalEarned: Number(newProduct.totalEarned || 0),
-          totalInputs: Number(newProduct.totalInputs || 0),
-          totalOutputs: Number(newProduct.totalOutputs || 0)
-        });
+        this._products = [...this._products, p];
       }
       this._notify();
     }
@@ -171,9 +160,8 @@ export const dataService = {
   async deleteOutput(id: string) { await runGas('deleteOutput', id); await this.fetchAll(); },
   async saveClosing(c: DailyClosing) {
     const res = await runGas('saveClosing', c);
-    if (res && (res.success || res.id)) {
-      const newClosing = res.data || (res.id ? res : c);
-      this._closings.unshift(newClosing);
+    if (res && res.success) {
+      this._closings = [c, ...this._closings];
       this._notify();
     }
     return res;
@@ -187,33 +175,27 @@ export const dataService = {
   async updateWithdrawal(w: EnvelopeWithdrawal) { await runGas('updateWithdrawal', w); await this.fetchAll(); },
   async saveRestockNote(note: PurchaseNote) {
     const res = await runGas('savePurchaseNote', note);
-    if (res && (res.success || res.note)) {
-      const data = res.data || res;
-      const newNote = data.note || (data.id ? data : note);
-      const newInputs = data.inputs || [];
-
-      this._purchaseNotes.unshift(newNote);
-      if (newInputs.length > 0) {
-        this._inputs.unshift(...newInputs.map((i: any) => ({ ...i, type: 'entry', notes: i.notes || '' })));
-      }
-
-      // Actualizar stock de productos
+    if (res && res.success) {
+      this._purchaseNotes = [note, ...this._purchaseNotes];
       const details = JSON.parse(note.detailsJson || '[]');
-      details.forEach((item: any) => {
-        const product = this._products.find(p => p.id === String(item.productId) || p.code === item.code);
-        if (product) {
-          product.stock = (Number(product.stock) || 0) + (Number(item.quantity) || 0);
-          product.totalInputs = (Number(product.totalInputs) || 0) + (Number(item.quantity) || 0);
-          product.totalInvested = (Number(product.totalInvested) || 0) + (Number(item.totalCost) || 0);
+      
+      this._products = this._products.map(p => {
+        const item = details.find((d: any) => String(d.productId) === String(p.id) || d.code === p.code);
+        if (item) {
+          return {
+            ...p,
+            stock: (Number(p.stock) || 0) + (Number(item.quantity) || 0),
+            totalInputs: (Number(p.totalInputs) || 0) + (Number(item.quantity) || 0),
+            totalInvested: (Number(p.totalInvested) || 0) + (Number(item.totalCost) || 0)
+          };
         }
+        return p;
       });
 
-      // Si está pagado, restar de ENV4
       if (note.status === 'Paid') {
-        const capitalEnv = this._envelopes.find(e => e.id === 'ENV4');
-        if (capitalEnv) {
-          capitalEnv.balance = (Number(capitalEnv.balance) || 0) - (Number(note.totalAmount) || 0);
-        }
+        this._envelopes = this._envelopes.map(e => 
+          e.id === 'ENV4' ? { ...e, balance: (Number(e.balance) || 0) - (Number(note.totalAmount) || 0) } : e
+        );
       }
       this._notify();
     }
@@ -222,18 +204,21 @@ export const dataService = {
   async deletePurchaseNote(id: string) { await runGas('deletePurchaseNote', id); await this.fetchAll(); },
   async saveOutputBatch(outputs: OutputTransaction[]) {
     const res = await runGas('saveOutputBatch', outputs);
-    if (res && (res.success || Array.isArray(res))) {
-      const data = res.data || (Array.isArray(res) ? res : outputs);
-      const newOutputs = (Array.isArray(data) ? data : [data]).map((o: any) => ({ ...o, type: 'exit', notes: o.notes || '' }));
-      this._outputs.unshift(...newOutputs);
+    if (res && res.success) {
+      const formattedOutputs = outputs.map(o => ({ ...o, type: 'exit' as const, notes: o.notes || '' }));
+      this._outputs = [...formattedOutputs, ...this._outputs];
 
-      outputs.forEach(out => {
-        const product = this._products.find(p => p.id === String(out.productId));
-        if (product) {
-          product.stock = (Number(product.stock) || 0) - (Number(out.quantity) || 0);
-          product.totalOutputs = (Number(product.totalOutputs) || 0) + (Number(out.quantity) || 0);
-          product.totalEarned = (Number(product.totalEarned) || 0) + (Number(out.totalSale) || 0);
+      this._products = this._products.map(p => {
+        const out = outputs.find(o => String(o.productId) === String(p.id));
+        if (out) {
+          return {
+            ...p,
+            stock: (Number(p.stock) || 0) - (Number(out.quantity) || 0),
+            totalOutputs: (Number(p.totalOutputs) || 0) + (Number(out.quantity) || 0),
+            totalEarned: (Number(p.totalEarned) || 0) + (Number(out.totalSale) || 0)
+          };
         }
+        return p;
       });
       this._notify();
     }
