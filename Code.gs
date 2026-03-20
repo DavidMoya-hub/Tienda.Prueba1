@@ -58,15 +58,20 @@ function doPost(e) {
       // --- OPERACIONES ---
       case 'saveProduct': result = saveProduct(data); break;
       case 'savePurchaseNote': result = savePurchaseNote(data); break;
-      case 'saveOutput': result = saveOutputBatch([data]); break;
+      case 'saveInput': result = saveInput(data); break;
+      case 'saveOutput': result = saveOutput(data); break;
       case 'saveOutputBatch': result = saveOutputBatch(data); break;
       case 'saveClosing': result = saveClosing(data); break;
+      case 'savePriceHistory': result = savePriceHistory(data); break;
       case 'updateNoteStatus': result = updateNoteStatus(data.id, data.status); break;
       case 'processPhysicalCount': result = processPhysicalCount(data.counts, data.shift); break;
       
       // --- BORRADO ---
       case 'deleteProduct': result = deleteProduct(extractId(data)); break;
       case 'deleteInput': result = deleteInput(extractId(data)); break;
+      case 'deleteOutput': result = deleteOutput(extractId(data)); break;
+      case 'deleteClosing': result = deleteClosing(extractId(data)); break;
+      case 'deletePriceHistory': result = deletePriceHistory(extractId(data)); break;
       case 'deletePurchaseNote': result = deletePurchaseNote(extractId(data)); break;
       
       case 'setup': result = setupSheet(); break;
@@ -280,38 +285,52 @@ function processPhysicalCount(counts, shift) {
 }
 
 function savePurchaseNote(note) {
+  const sheet = getSheet("PurchaseNotes");
+  const data = sheet.getDataRange().getValues();
+  const searchId = note.id.toString().trim().toUpperCase();
+  let isNew = true;
+  
+  for(let i = 1; i < data.length; i++) {
+    if(data[i][0].toString().trim().toUpperCase() === searchId) {
+      isNew = false;
+      break;
+    }
+  }
+
   const headers = ["id", "date", "provider", "totalAmount", "status", "detailsJson"];
   const amount = parseAmount(note.totalAmount);
   
   upsertToSheet("PurchaseNotes", headers, {...note, totalAmount: amount}, "id");
   
-  // Registrar entradas individuales en la hoja "Inputs"
-  try {
-    const details = JSON.parse(note.detailsJson);
-    const inputSheet = getSheet("Inputs");
-    const inputHeaders = ["id", "productId", "productName", "quantity", "unitCost", "totalCost", "date", "provider", "notes", "type"];
-    
-    details.forEach(item => {
-      const inputRow = inputHeaders.map(h => {
-        if (h === 'id') return "INP-" + Utilities.getUuid();
-        if (h === 'productId') return item.productId;
-        if (h === 'productName') return item.productName;
-        if (h === 'quantity') return parseAmount(item.quantity);
-        if (h === 'unitCost') return parseAmount(item.unitCost);
-        if (h === 'totalCost') return parseAmount(item.totalCost);
-        if (h === 'date') return note.date;
-        if (h === 'provider') return note.provider;
-        if (h === 'notes') return "Compra: " + note.id;
-        if (h === 'type') return "entry";
-        return "";
-      });
-      inputSheet.appendRow(inputRow);
+  // Solo registrar entradas individuales si es una nota NUEVA
+  if (isNew) {
+    try {
+      const details = JSON.parse(note.detailsJson);
+      const inputSheet = getSheet("Inputs");
+      const inputHeaders = ["id", "productId", "productName", "quantity", "unitCost", "totalCost", "date", "provider", "notes", "type"];
       
-      // Actualizar stock y totalInvested en Products
-      updateProductStock(item.productId, parseAmount(item.quantity), parseAmount(item.totalCost), true);
-    });
-  } catch (e) {
-    console.error("Error al procesar detalles de compra: " + e.message);
+      details.forEach(item => {
+        const inputRow = inputHeaders.map(h => {
+          if (h === 'id') return "INP-" + Utilities.getUuid();
+          if (h === 'productId') return item.productId;
+          if (h === 'productName') return item.productName;
+          if (h === 'quantity') return parseAmount(item.quantity);
+          if (h === 'unitCost') return parseAmount(item.unitCost);
+          if (h === 'totalCost') return parseAmount(item.totalCost);
+          if (h === 'date') return note.date;
+          if (h === 'provider') return note.provider;
+          if (h === 'notes') return "Compra: " + note.id;
+          if (h === 'type') return "entry";
+          return "";
+        });
+        inputSheet.appendRow(inputRow);
+        
+        // Actualizar stock y totalInvested en Products
+        updateProductStock(item.productId, parseAmount(item.quantity), parseAmount(item.totalCost), true);
+      });
+    } catch (e) {
+      console.error("Error al procesar detalles de compra: " + e.message);
+    }
   }
 
   if (note.status === 'Paid') updateEnvelopeBalance("ENV4", -amount);
@@ -509,13 +528,123 @@ function createResponse(data) {
   return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
 }
 
-function deleteProduct(id) { return {success: deleteRow("Products", id)}; }
-function deleteInput(id) { return {success: deleteRow("Inputs", id)}; }
+function deleteInput(id) { 
+  const sheet = getSheet("Inputs");
+  const data = sheet.getDataRange().getValues();
+  const searchId = id.toString().trim().toUpperCase();
+  
+  for(let i = 1; i < data.length; i++) {
+    if(data[i][0].toString().trim().toUpperCase() === searchId) {
+      const productId = data[i][1];
+      const quantity = parseAmount(data[i][3]);
+      const totalCost = parseAmount(data[i][5]);
+      
+      // Revertir stock y totalInvested
+      updateProductStock(productId, -quantity, -totalCost, true);
+      
+      sheet.deleteRow(i + 1);
+      return {success: true};
+    }
+  }
+  return {success: false, error: "No encontrado"};
+}
+
+function deleteOutput(id) { 
+  const sheet = getSheet("Outputs");
+  const data = sheet.getDataRange().getValues();
+  const searchId = id.toString().trim().toUpperCase();
+  
+  for(let i = 1; i < data.length; i++) {
+    if(data[i][0].toString().trim().toUpperCase() === searchId) {
+      const productId = data[i][1];
+      const quantity = parseAmount(data[i][3]);
+      const totalSale = parseAmount(data[i][5]);
+      
+      // Revertir stock y estadísticas
+      // Para salidas, revertir significa SUMAR al stock
+      updateProductStock(productId, -quantity, -totalSale, false);
+      
+      sheet.deleteRow(i + 1);
+      return {success: true};
+    }
+  }
+  return {success: false, error: "No encontrado"};
+}
+
+function deleteClosing(id) { return {success: deleteRow("Closings", id)}; }
+function deletePriceHistory(id) { return {success: deleteRow("PriceHistory", id)}; }
 function deletePurchaseNote(id) { return {success: deleteRow("PurchaseNotes", id)}; }
 
 function saveClosing(c) {
   const headers = ["id", "date", "totalSold", "netProfit", "cogs"];
   return upsertToSheet("Closings", headers, c, "id");
+}
+
+function saveInput(i) {
+  const sheet = getSheet("Inputs");
+  const data = sheet.getDataRange().getValues();
+  const searchId = i.id.toString().trim().toUpperCase();
+  const headers = ["id", "productId", "productName", "quantity", "unitCost", "totalCost", "date", "provider", "notes", "type"];
+  
+  let oldQuantity = 0;
+  let oldTotalCost = 0;
+  let foundRow = -1;
+
+  for(let row = 1; row < data.length; row++) {
+    if(data[row][0].toString().trim().toUpperCase() === searchId) {
+      oldQuantity = parseAmount(data[row][3]);
+      oldTotalCost = parseAmount(data[row][5]);
+      foundRow = row + 1;
+      break;
+    }
+  }
+
+  const newQuantity = parseAmount(i.quantity);
+  const newTotalCost = parseAmount(i.totalCost);
+  
+  // Ajustar stock: diferencia entre lo nuevo y lo viejo
+  const diffQty = newQuantity - oldQuantity;
+  const diffCost = newTotalCost - oldTotalCost;
+  
+  updateProductStock(i.productId, diffQty, diffCost, true);
+
+  return upsertToSheet("Inputs", headers, i, "id");
+}
+
+function saveOutput(o) {
+  const sheet = getSheet("Outputs");
+  const data = sheet.getDataRange().getValues();
+  const searchId = o.id.toString().trim().toUpperCase();
+  const headers = ["id", "productId", "productName", "quantity", "salePrice", "totalSale", "date", "shift", "notes", "type"];
+  
+  let oldQuantity = 0;
+  let oldTotalSale = 0;
+  let foundRow = -1;
+
+  for(let row = 1; row < data.length; row++) {
+    if(data[row][0].toString().trim().toUpperCase() === searchId) {
+      oldQuantity = parseAmount(data[row][3]);
+      oldTotalSale = parseAmount(data[row][5]);
+      foundRow = row + 1;
+      break;
+    }
+  }
+
+  const newQuantity = parseAmount(o.quantity);
+  const newTotalSale = parseAmount(o.totalSale);
+  
+  // Ajustar stock para salidas: (nuevo - viejo) se RESTA del stock
+  const diffQty = newQuantity - oldQuantity;
+  const diffSale = newTotalSale - oldTotalSale;
+  
+  updateProductStock(o.productId, diffQty, diffSale, false);
+
+  return upsertToSheet("Outputs", headers, o, "id");
+}
+
+function savePriceHistory(h) {
+  const headers = ["id", "productId", "productName", "field", "oldValue", "newValue", "date"];
+  return upsertToSheet("PriceHistory", headers, h, "id");
 }
 
 function setupSheet() {

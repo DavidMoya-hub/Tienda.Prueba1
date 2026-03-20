@@ -24,9 +24,10 @@ const DailyInventoryCount: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const filteredProducts = useMemo(() => {
+    const searchLower = searchTerm.toLowerCase();
     return products.filter(p => 
-      p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      p.code.includes(searchTerm)
+      String(p.name || '').toLowerCase().includes(searchLower) || 
+      String(p.code || '').toLowerCase().includes(searchLower)
     );
   }, [products, searchTerm]);
 

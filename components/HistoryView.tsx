@@ -1,44 +1,98 @@
 import React, { useState, useMemo } from 'react';
-import { Calendar, ArrowUpCircle, ArrowDownCircle, Search, ClipboardList, Wallet, CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import { Calendar, ArrowUpCircle, ArrowDownCircle, Search, ClipboardList, Wallet, CheckCircle, Clock, AlertCircle, Edit, Trash2, X, Save } from 'lucide-react';
 import { dataService } from '../services/dataService';
-import Modal from './Modal';
+import { InputTransaction, OutputTransaction, DailyClosing, PriceHistory, PurchaseNote } from '../types';
 
 const HistoryView: React.FC = () => {
-  const [tab, setTab] = useState<'Inputs' | 'Outputs' | 'Audit' | 'Debts'>('Inputs');
-  const [modal, setModal] = useState<{ isOpen: boolean; title: string; message: string; type: 'confirm' | 'info'; onConfirm?: () => void }>({
-    isOpen: false,
-    title: '',
-    message: '',
-    type: 'info'
-  });
+  const [tab, setTab] = useState<'Inputs' | 'Outputs' | 'Closings' | 'Audit' | 'Debts'>('Inputs');
+  const [editingItem, setEditingItem] = useState<any>(null);
+  const [editType, setEditType] = useState<'Input' | 'Output' | 'Closing' | 'Debt' | 'Audit' | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  
   const inputs = dataService.getInputs();
   const outputs = dataService.getOutputs();
   const closings = dataService.getClosings();
   const priceHistory = dataService.getPriceHistory();
   const purchaseNotes = dataService.getPurchaseNotes();
 
-  const movements = useMemo(() => {
-    const all = [
-      ...inputs.map(i => ({ ...i, type: 'entry' as const })),
-      ...outputs.map(o => ({ ...o, type: 'exit' as const }))
-    ];
-    return all.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [inputs, outputs]);
+  const filterAndSort = <T extends { date: string }>(data: T[], searchFields: (keyof T)[]) => {
+    let filtered = [...data];
 
-  const handleMarkAsPaid = (noteId: string) => {
-    setModal({
-      isOpen: true,
-      title: 'Liquidar Nota',
-      message: '¿Marcar esta nota como PAGADA? Se usará el capital del Sobre 4.',
-      type: 'confirm',
-      onConfirm: async () => {
-        try {
-          await dataService.updateNoteStatus(noteId, 'Paid');
-        } catch (error) {
-          console.error('Error updating note status:', error);
-        }
-      }
+    if (searchTerm) {
+      const lowerSearch = searchTerm.toLowerCase();
+      filtered = filtered.filter(item => 
+        searchFields.some(field => {
+          const val = item[field];
+          return val && String(val).toLowerCase().includes(lowerSearch);
+        })
+      );
+    }
+
+    if (startDate) {
+      const start = new Date(startDate).getTime();
+      filtered = filtered.filter(item => new Date(item.date).getTime() >= start);
+    }
+
+    if (endDate) {
+      const end = new Date(endDate).getTime() + 86400000; // Include the whole end day
+      filtered = filtered.filter(item => new Date(item.date).getTime() <= end);
+    }
+
+    return filtered.sort((a, b) => {
+      const timeA = new Date(a.date).getTime();
+      const timeB = new Date(b.date).getTime();
+      return sortOrder === 'desc' ? timeB - timeA : timeA - timeB;
     });
+  };
+
+  const sortedInputs = useMemo(() => filterAndSort(inputs, ['productName', 'notes'] as any), [inputs, searchTerm, startDate, endDate, sortOrder]);
+  const sortedOutputs = useMemo(() => filterAndSort(outputs, ['productName', 'shift'] as any), [outputs, searchTerm, startDate, endDate, sortOrder]);
+  const sortedClosings = useMemo(() => filterAndSort(closings, [] as any), [closings, searchTerm, startDate, endDate, sortOrder]);
+  const sortedDebts = useMemo(() => filterAndSort(purchaseNotes, ['provider'] as any), [purchaseNotes, searchTerm, startDate, endDate, sortOrder]);
+  const sortedAudit = useMemo(() => filterAndSort(priceHistory, ['productName', 'field'] as any), [priceHistory, searchTerm, startDate, endDate, sortOrder]);
+
+  const handleMarkAsPaid = async (noteId: string) => {
+    if (confirm("¿Marcar esta nota como PAGADA? Se usará el capital del Sobre 4.")) {
+      await dataService.updateNoteStatus(noteId, 'Paid');
+    }
+  };
+
+  const handleDelete = async (id: string, type: 'Input' | 'Output' | 'Closing' | 'Debt' | 'Audit') => {
+    if (!confirm("¿Estás seguro de eliminar este registro? Esta acción no se puede deshacer.")) return;
+    
+    try {
+      switch (type) {
+        case 'Input': await dataService.deleteInput(id); break;
+        case 'Output': await dataService.deleteOutput(id); break;
+        case 'Closing': await dataService.deleteClosing(id); break;
+        case 'Debt': await dataService.deletePurchaseNote(id); break;
+        case 'Audit': await dataService.deletePriceHistory(id); break;
+      }
+    } catch (error) {
+      alert("Error al eliminar: " + error);
+    }
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingItem || !editType) return;
+
+    try {
+      switch (editType) {
+        case 'Input': await dataService.saveInput(editingItem); break;
+        case 'Output': await dataService.saveOutput(editingItem); break;
+        case 'Closing': await dataService.saveClosing(editingItem); break;
+        case 'Debt': await dataService.saveRestockNote(editingItem); break;
+        case 'Audit': await dataService.savePriceHistory(editingItem); break;
+      }
+      setEditingItem(null);
+      setEditType(null);
+    } catch (error) {
+      alert("Error al guardar: " + error);
+    }
   };
 
   const pendingDebts = useMemo(() => {
@@ -59,9 +113,16 @@ const HistoryView: React.FC = () => {
           </button>
           <button 
             onClick={() => setTab('Outputs')}
-            className={`px-4 md:px-6 py-2 md:py-3 rounded-xl md:rounded-2xl font-black transition-all flex items-center space-x-2 whitespace-nowrap tracking-tight text-xs md:text-base ${tab === 'Outputs' ? 'bg-red-600 text-white shadow-lg shadow-red-200' : 'text-blue-400 hover:text-blue-600'}`}
+            className={`px-4 md:px-6 py-2 md:py-3 rounded-xl md:rounded-2xl font-black transition-all flex items-center space-x-2 whitespace-nowrap tracking-tight text-xs md:text-base ${tab === 'Outputs' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-200' : 'text-blue-400 hover:text-blue-600'}`}
           >
             <ArrowDownCircle size={18} className="md:w-5 md:h-5" />
+            <span>Salidas</span>
+          </button>
+          <button 
+            onClick={() => setTab('Closings')}
+            className={`px-4 md:px-6 py-2 md:py-3 rounded-xl md:rounded-2xl font-black transition-all flex items-center space-x-2 whitespace-nowrap tracking-tight text-xs md:text-base ${tab === 'Closings' ? 'bg-red-600 text-white shadow-lg shadow-red-200' : 'text-blue-400 hover:text-blue-600'}`}
+          >
+            <Clock size={18} className="md:w-5 md:h-5" />
             <span>Cierres</span>
           </button>
           <button 
@@ -81,6 +142,66 @@ const HistoryView: React.FC = () => {
         </div>
       </div>
 
+      {/* Filtros Globales */}
+      <div className="bg-white p-6 md:p-8 rounded-[2rem] border border-blue-100 shadow-xl shadow-blue-900/5 flex flex-col md:flex-row gap-4 md:items-end">
+        <div className="flex-1 space-y-2">
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1 flex items-center gap-2">
+            <Search size={12} /> <span>Buscador</span>
+          </label>
+          <input 
+            type="text" 
+            placeholder="Buscar por producto, proveedor, notas..." 
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-bold focus:border-blue-500 outline-none transition-all text-sm"
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-4 flex-1">
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1 flex items-center gap-2">
+              <Calendar size={12} /> <span>Desde</span>
+            </label>
+            <input 
+              type="date" 
+              value={startDate}
+              onChange={e => setStartDate(e.target.value)}
+              className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-bold focus:border-blue-500 outline-none transition-all text-sm"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1 flex items-center gap-2">
+              <Calendar size={12} /> <span>Hasta</span>
+            </label>
+            <input 
+              type="date" 
+              value={endDate}
+              onChange={e => setEndDate(e.target.value)}
+              className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-bold focus:border-blue-500 outline-none transition-all text-sm"
+            />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1 flex items-center gap-2">
+            <ClipboardList size={12} /> <span>Orden</span>
+          </label>
+          <select 
+            value={sortOrder}
+            onChange={e => setSortOrder(e.target.value as 'asc' | 'desc')}
+            className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-bold focus:border-blue-500 outline-none transition-all text-sm appearance-none cursor-pointer"
+          >
+            <option value="desc">Más Reciente</option>
+            <option value="asc">Más Antiguo</option>
+          </select>
+        </div>
+        <button 
+          onClick={() => { setSearchTerm(''); setStartDate(''); setEndDate(''); setSortOrder('desc'); }}
+          className="bg-slate-100 text-slate-400 p-3.5 rounded-2xl hover:bg-slate-200 transition-all"
+          title="Limpiar Filtros"
+        >
+          <X size={20} />
+        </button>
+      </div>
+
       <div className="bg-white rounded-[3rem] border border-blue-100 overflow-hidden shadow-2xl shadow-blue-900/5">
         {tab === 'Inputs' && (
           <div className="overflow-x-auto">
@@ -88,27 +209,38 @@ const HistoryView: React.FC = () => {
               <thead className="bg-blue-50/50 text-blue-900/40 text-[8px] md:text-[10px] font-black uppercase tracking-[0.2em]">
                 <tr>
                   <th className="px-4 md:px-8 py-4 md:py-6">Fecha</th>
-                  <th className="px-4 md:px-8 py-4 md:py-6">Tipo</th>
                   <th className="px-4 md:px-8 py-4 md:py-6">Producto</th>
                   <th className="px-4 md:px-8 py-4 md:py-6">Cant</th>
                   <th className="px-4 md:px-8 py-4 md:py-6">Notas</th>
-                  <th className="px-4 md:px-8 py-4 md:py-6 text-right">Monto</th>
+                  <th className="px-4 md:px-8 py-4 md:py-6 text-right">Costo Total</th>
+                  <th className="px-4 md:px-8 py-4 md:py-6 text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-blue-50 text-xs md:text-sm">
-                {movements.map(log => (
+                {sortedInputs.map(log => (
                   <tr key={log.id} className="hover:bg-blue-50/30 transition-colors group">
                     <td className="px-4 md:px-8 py-3 md:py-5 text-slate-400 font-bold">{new Date(log.date).toLocaleDateString()}</td>
-                    <td className="px-4 md:px-8 py-3 md:py-5">
-                      <span className={`px-2 md:px-3 py-1 rounded-lg font-black text-[8px] md:text-[10px] uppercase tracking-widest ${log.type === 'entry' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-red-50 text-red-600 border border-red-100'}`}>
-                        {log.type === 'entry' ? 'Entrada' : 'Salida'}
-                      </span>
-                    </td>
                     <td className="px-4 md:px-8 py-3 md:py-5 font-black text-slate-800 text-sm md:text-base">{log.productName}</td>
                     <td className="px-4 md:px-8 py-3 md:py-5 font-black text-blue-900"><span className="bg-blue-50 px-2 md:px-3 py-1 rounded-lg">{log.quantity}</span></td>
                     <td className="px-4 md:px-8 py-3 md:py-5 font-black text-slate-800 text-sm md:text-base">{log.notes || '-'}</td>
-                    <td className={`px-4 md:px-8 py-3 md:py-5 font-black text-right text-base md:text-lg ${log.type === 'entry' ? 'text-red-600' : 'text-emerald-600'}`}>
-                      ${log.type === 'entry' ? (log as any).totalCost?.toFixed(2) : (log as any).totalSale?.toFixed(2)}
+                    <td className="px-4 md:px-8 py-3 md:py-5 font-black text-right text-base md:text-lg text-red-600">
+                      ${log.totalCost?.toFixed(2)}
+                    </td>
+                    <td className="px-4 md:px-8 py-3 md:py-5 text-right">
+                      <div className="flex items-center justify-end space-x-2">
+                        <button 
+                          onClick={() => { setEditingItem({...log}); setEditType('Input'); }}
+                          className="p-2 text-blue-600 hover:bg-blue-100 rounded-xl transition-colors bg-blue-50"
+                        >
+                          <Edit size={16} />
+                        </button>
+                        <button 
+                          onClick={() => handleDelete(log.id, 'Input')}
+                          className="p-2 text-red-600 hover:bg-red-100 rounded-xl transition-colors bg-red-50"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -120,31 +252,82 @@ const HistoryView: React.FC = () => {
         {tab === 'Outputs' && (
           <div className="overflow-x-auto">
             <table className="w-full text-left min-w-[600px]">
+              <thead className="bg-emerald-50/50 text-emerald-900/40 text-[8px] md:text-[10px] font-black uppercase tracking-[0.2em]">
+                <tr>
+                  <th className="px-4 md:px-8 py-4 md:py-6">Fecha</th>
+                  <th className="px-4 md:px-8 py-4 md:py-6">Producto</th>
+                  <th className="px-4 md:px-8 py-4 md:py-6">Cant</th>
+                  <th className="px-4 md:px-8 py-4 md:py-6">Turno</th>
+                  <th className="px-4 md:px-8 py-4 md:py-6 text-right">Venta Total</th>
+                  <th className="px-4 md:px-8 py-4 md:py-6 text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-emerald-50 text-xs md:text-sm">
+                {sortedOutputs.map(log => (
+                  <tr key={log.id} className="hover:bg-emerald-50/30 transition-colors group">
+                    <td className="px-4 md:px-8 py-3 md:py-5 text-slate-400 font-bold">{new Date(log.date).toLocaleDateString()}</td>
+                    <td className="px-4 md:px-8 py-3 md:py-5 font-black text-slate-800 text-sm md:text-base">{log.productName}</td>
+                    <td className="px-4 md:px-8 py-3 md:py-5 font-black text-emerald-900"><span className="bg-emerald-50 px-2 md:px-3 py-1 rounded-lg">{log.quantity}</span></td>
+                    <td className="px-4 md:px-8 py-3 md:py-5 font-black text-slate-800 text-sm md:text-base">{log.shift || '-'}</td>
+                    <td className="px-4 md:px-8 py-3 md:py-5 font-black text-right text-base md:text-lg text-emerald-600">
+                      ${log.totalSale?.toFixed(2)}
+                    </td>
+                    <td className="px-4 md:px-8 py-3 md:py-5 text-right">
+                      <div className="flex items-center justify-end space-x-2">
+                        <button 
+                          onClick={() => { setEditingItem({...log}); setEditType('Output'); }}
+                          className="p-2 text-blue-600 hover:bg-blue-100 rounded-xl transition-colors bg-blue-50"
+                        >
+                          <Edit size={16} />
+                        </button>
+                        <button 
+                          onClick={() => handleDelete(log.id, 'Output')}
+                          className="p-2 text-red-600 hover:bg-red-100 rounded-xl transition-colors bg-red-50"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {tab === 'Closings' && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left min-w-[600px]">
               <thead className="bg-blue-50/50 text-blue-900/40 text-[8px] md:text-[10px] font-black uppercase tracking-[0.2em]">
                 <tr>
                   <th className="px-4 md:px-8 py-4 md:py-6">Fecha Corte</th>
                   <th className="px-4 md:px-8 py-4 md:py-6">Venta Bruta</th>
                   <th className="px-4 md:px-8 py-4 md:py-6">Costo Inv (COGS)</th>
                   <th className="px-4 md:px-8 py-4 md:py-6">Utilidad Neta</th>
-                  <th className="px-4 md:px-8 py-4 md:py-6 text-right">Margen</th>
+                  <th className="px-4 md:px-8 py-4 md:py-6 text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-blue-50 text-xs md:text-sm">
-                {closings.slice().reverse().map(log => (
-                  <tr key={log.id} className="hover:bg-blue-50/30 transition-colors">
+                {sortedClosings.map(log => (
+                  <tr key={log.id} className="hover:bg-blue-50/30 transition-colors group">
                     <td className="px-4 md:px-8 py-3 md:py-5 font-black text-slate-800">{new Date(log.date).toLocaleString()}</td>
                     <td className="px-4 md:px-8 py-3 md:py-5 text-blue-600 font-black text-lg md:text-xl tracking-tighter">${Number(log.totalSold)?.toLocaleString()}</td>
                     <td className="px-4 md:px-8 py-3 md:py-5 text-slate-400 font-bold">-${Number(log.cogs)?.toLocaleString()}</td>
                     <td className="px-4 md:px-8 py-3 md:py-5 text-red-600 font-black text-lg md:text-xl tracking-tighter">${Number(log.netProfit)?.toLocaleString()}</td>
                     <td className="px-4 md:px-8 py-3 md:py-5 text-right">
-                      <div className="flex items-center justify-end space-x-2 md:space-x-3">
-                        <div className="w-16 md:w-20 h-1.5 md:h-2 bg-slate-100 rounded-full overflow-hidden shadow-inner">
-                          <div 
-                            className="h-full bg-red-600" 
-                            style={{ width: `${Math.min(100, (log.netProfit / (log.totalSold || 1)) * 100 * 1.5)}%` }}
-                          ></div>
-                        </div>
-                        <span className="text-[8px] md:text-[10px] font-black text-red-600 tracking-widest">{((log.netProfit / (log.totalSold || 1)) * 100).toFixed(0)}%</span>
+                      <div className="flex items-center justify-end space-x-2">
+                        <button 
+                          onClick={() => { setEditingItem({...log}); setEditType('Closing'); }}
+                          className="p-2 text-blue-600 hover:bg-blue-100 rounded-xl transition-colors bg-blue-50"
+                        >
+                          <Edit size={16} />
+                        </button>
+                        <button 
+                          onClick={() => handleDelete(log.id, 'Closing')}
+                          className="p-2 text-red-600 hover:bg-red-100 rounded-xl transition-colors bg-red-50"
+                        >
+                          <Trash2 size={16} />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -167,8 +350,8 @@ const HistoryView: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-blue-50 text-xs md:text-sm">
-                {purchaseNotes.slice().reverse().map(note => (
-                  <tr key={note.id} className={`hover:bg-slate-50 transition-colors ${note.status === 'Pending' ? 'bg-amber-50/20' : ''}`}>
+                {sortedDebts.map(note => (
+                  <tr key={note.id} className={`hover:bg-slate-50 transition-colors group ${note.status === 'Pending' ? 'bg-amber-50/20' : ''}`}>
                     <td className="px-4 md:px-8 py-3 md:py-5 text-slate-400 font-bold">{new Date(note.date).toLocaleDateString()}</td>
                     <td className="px-4 md:px-8 py-3 md:py-5 font-black text-slate-800 text-base md:text-lg">{note.provider}</td>
                     <td className="px-4 md:px-8 py-3 md:py-5 font-black text-red-600 text-lg md:text-xl tracking-tighter">${Number(note.totalAmount).toLocaleString()}</td>
@@ -186,14 +369,30 @@ const HistoryView: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-4 md:px-8 py-3 md:py-5 text-right">
-                      {note.status === 'Pending' && (
-                        <button 
-                          onClick={() => handleMarkAsPaid(note.id)}
-                          className="bg-blue-600 text-white px-4 md:px-8 py-2 md:py-3 rounded-xl md:rounded-2xl font-black text-[10px] md:text-xs hover:bg-blue-700 transition-all active:scale-95 shadow-xl shadow-blue-200 uppercase tracking-widest"
-                        >
-                          Liquidar Ahora
-                        </button>
-                      )}
+                      <div className="flex items-center justify-end space-x-4">
+                        {note.status === 'Pending' && (
+                          <button 
+                            onClick={() => handleMarkAsPaid(note.id)}
+                            className="bg-blue-600 text-white px-4 md:px-8 py-2 md:py-3 rounded-xl md:rounded-2xl font-black text-[10px] md:text-xs hover:bg-blue-700 transition-all active:scale-95 shadow-xl shadow-blue-200 uppercase tracking-widest"
+                          >
+                            Liquidar Ahora
+                          </button>
+                        )}
+                        <div className="flex items-center space-x-2">
+                          <button 
+                            onClick={() => { setEditingItem({...note}); setEditType('Debt'); }}
+                            className="p-2 text-blue-600 hover:bg-blue-100 rounded-xl transition-colors bg-blue-50"
+                          >
+                            <Edit size={16} />
+                          </button>
+                          <button 
+                            onClick={() => handleDelete(note.id, 'Debt')}
+                            className="p-2 text-red-600 hover:bg-red-100 rounded-xl transition-colors bg-red-50"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -220,15 +419,33 @@ const HistoryView: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-blue-50 text-xs md:text-sm">
-                {priceHistory.slice().reverse().map(log => (
-                  <tr key={log.id} className="hover:bg-slate-50">
+                {sortedAudit.map(log => (
+                  <tr key={log.id} className="hover:bg-slate-50 group">
                     <td className="px-4 md:px-8 py-3 md:py-5 text-slate-400 font-medium">{new Date(log.date).toLocaleString()}</td>
                     <td className="px-4 md:px-8 py-3 md:py-5 font-black text-slate-800">{log.productName}</td>
                     <td className="px-4 md:px-8 py-3 md:py-5">
                       <span className="px-3 md:px-4 py-1 bg-blue-50 text-blue-600 rounded-lg md:rounded-xl text-[8px] md:text-[10px] font-black uppercase tracking-widest border border-blue-100">{log.field}</span>
                     </td>
                     <td className="px-4 md:px-8 py-3 md:py-5 text-red-400 font-bold">{log.oldValue}</td>
-                    <td className="px-4 md:px-8 py-3 md:py-5 text-blue-600 font-black text-lg md:text-xl text-right tracking-tighter">{log.newValue}</td>
+                    <td className="px-4 md:px-8 py-3 md:py-5 text-right">
+                      <div className="flex items-center justify-end space-x-4">
+                        <span className="text-blue-600 font-black text-lg md:text-xl tracking-tighter">{log.newValue}</span>
+                        <div className="flex items-center space-x-2">
+                          <button 
+                            onClick={() => { setEditingItem({...log}); setEditType('Audit'); }}
+                            className="p-2 text-blue-600 hover:bg-blue-100 rounded-xl transition-colors bg-blue-50"
+                          >
+                            <Edit size={16} />
+                          </button>
+                          <button 
+                            onClick={() => handleDelete(log.id, 'Audit')}
+                            className="p-2 text-red-600 hover:bg-red-100 rounded-xl transition-colors bg-red-50"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -236,14 +453,163 @@ const HistoryView: React.FC = () => {
           </div>
         )}
       </div>
-      <Modal 
-        isOpen={modal.isOpen}
-        onClose={() => setModal({ ...modal, isOpen: false })}
-        title={modal.title}
-        message={modal.message}
-        type={modal.type}
-        onConfirm={modal.onConfirm}
-      />
+
+      {editingItem && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
+            <div className="bg-blue-900 p-6 md:p-8 text-white flex justify-between items-center">
+              <div>
+                <h3 className="text-xl md:text-2xl font-black tracking-tight">Editar Registro</h3>
+                <p className="text-blue-300 text-xs font-bold uppercase tracking-widest">{editType}</p>
+              </div>
+              <button onClick={() => { setEditingItem(null); setEditType(null); }} className="text-blue-300 hover:text-white transition-colors">
+                <X size={24} />
+              </button>
+            </div>
+            <form onSubmit={handleSaveEdit} className="p-6 md:p-8 space-y-6">
+              <div className="grid grid-cols-1 gap-4">
+                {(editType === 'Input' || editType === 'Output') && (
+                  <>
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Cantidad</label>
+                      <input 
+                        type="number" 
+                        value={editingItem.quantity}
+                        onChange={e => setEditingItem({...editingItem, quantity: Number(e.target.value)})}
+                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-bold focus:border-blue-500 outline-none transition-all"
+                      />
+                    </div>
+                    {editType === 'Input' ? (
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Costo Total</label>
+                        <input 
+                          type="number" 
+                          value={editingItem.totalCost}
+                          onChange={e => setEditingItem({...editingItem, totalCost: Number(e.target.value)})}
+                          className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-bold focus:border-blue-500 outline-none transition-all"
+                        />
+                      </div>
+                    ) : (
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Venta Total</label>
+                        <input 
+                          type="number" 
+                          value={editingItem.totalSale}
+                          onChange={e => setEditingItem({...editingItem, totalSale: Number(e.target.value)})}
+                          className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-bold focus:border-blue-500 outline-none transition-all"
+                        />
+                      </div>
+                    )}
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Notas</label>
+                      <textarea 
+                        value={editingItem.notes}
+                        onChange={e => setEditingItem({...editingItem, notes: e.target.value})}
+                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-bold focus:border-blue-500 outline-none transition-all h-24 resize-none"
+                      />
+                    </div>
+                  </>
+                )}
+
+                {editType === 'Closing' && (
+                  <>
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Venta Total</label>
+                      <input 
+                        type="number" 
+                        value={editingItem.totalSold}
+                        onChange={e => setEditingItem({...editingItem, totalSold: Number(e.target.value)})}
+                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-bold focus:border-blue-500 outline-none transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Utilidad Neta</label>
+                      <input 
+                        type="number" 
+                        value={editingItem.netProfit}
+                        onChange={e => setEditingItem({...editingItem, netProfit: Number(e.target.value)})}
+                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-bold focus:border-blue-500 outline-none transition-all"
+                      />
+                    </div>
+                  </>
+                )}
+
+                {editType === 'Debt' && (
+                  <>
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Proveedor</label>
+                      <input 
+                        type="text" 
+                        value={editingItem.provider}
+                        onChange={e => setEditingItem({...editingItem, provider: e.target.value})}
+                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-bold focus:border-blue-500 outline-none transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Importe Total</label>
+                      <input 
+                        type="number" 
+                        value={editingItem.totalAmount}
+                        onChange={e => setEditingItem({...editingItem, totalAmount: Number(e.target.value)})}
+                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-bold focus:border-blue-500 outline-none transition-all"
+                      />
+                    </div>
+                  </>
+                )}
+
+                {editType === 'Audit' && (
+                  <>
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Producto</label>
+                      <input 
+                        type="text" 
+                        value={editingItem.productName}
+                        onChange={e => setEditingItem({...editingItem, productName: e.target.value})}
+                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-bold focus:border-blue-500 outline-none transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Campo</label>
+                      <input 
+                        type="text" 
+                        value={editingItem.field}
+                        onChange={e => setEditingItem({...editingItem, field: e.target.value})}
+                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-bold focus:border-blue-500 outline-none transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Valor Anterior</label>
+                      <input 
+                        type="text" 
+                        value={editingItem.oldValue}
+                        onChange={e => setEditingItem({...editingItem, oldValue: e.target.value})}
+                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-bold focus:border-blue-500 outline-none transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Nuevo Valor</label>
+                      <input 
+                        type="text" 
+                        value={editingItem.newValue}
+                        onChange={e => setEditingItem({...editingItem, newValue: e.target.value})}
+                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-bold focus:border-blue-500 outline-none transition-all"
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <button 
+                type="submit"
+                className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black flex items-center justify-center space-x-2 hover:bg-blue-700 transition-all shadow-xl shadow-blue-200 active:scale-95"
+              >
+                <Save size={20} />
+                <span>Guardar Cambios</span>
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

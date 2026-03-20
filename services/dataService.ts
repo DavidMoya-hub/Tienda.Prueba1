@@ -140,16 +140,105 @@ export const dataService = {
     };
   },
 
-  async saveProduct(p: Product) { await runGas('saveProduct', p); await this.fetchAll(); },
+  async saveProduct(p: Product) {
+    const res = await runGas('saveProduct', p);
+    if (res && (res.success || res.id)) {
+      const newProduct = res.data || (res.id ? res : p);
+      const index = this._products.findIndex(prod => prod.id === String(newProduct.id || p.id));
+      if (index !== -1) {
+        this._products[index] = { ...this._products[index], ...newProduct };
+      } else {
+        this._products.push({
+          ...newProduct,
+          id: String(newProduct.id || ''),
+          costPrice: Number(newProduct.costPrice || 0),
+          salePrice: Number(newProduct.salePrice || 0),
+          stock: Number(newProduct.stock || 0),
+          totalInvested: Number(newProduct.totalInvested || 0),
+          totalEarned: Number(newProduct.totalEarned || 0),
+          totalInputs: Number(newProduct.totalInputs || 0),
+          totalOutputs: Number(newProduct.totalOutputs || 0)
+        });
+      }
+      this._notify();
+    }
+    return res;
+  },
   async deleteProduct(id: string) { await runGas('deleteProduct', id); await this.fetchAll(); },
+  async saveInput(i: InputTransaction) { await runGas('saveInput', i); await this.fetchAll(); },
+  async deleteInput(id: string) { await runGas('deleteInput', id); await this.fetchAll(); },
+  async saveOutput(o: OutputTransaction) { await runGas('saveOutput', o); await this.fetchAll(); },
+  async deleteOutput(id: string) { await runGas('deleteOutput', id); await this.fetchAll(); },
+  async saveClosing(c: DailyClosing) {
+    const res = await runGas('saveClosing', c);
+    if (res && (res.success || res.id)) {
+      const newClosing = res.data || (res.id ? res : c);
+      this._closings.unshift(newClosing);
+      this._notify();
+    }
+    return res;
+  },
+  async deleteClosing(id: string) { await runGas('deleteClosing', id); await this.fetchAll(); },
+  async savePriceHistory(h: PriceHistory) { await runGas('savePriceHistory', h); await this.fetchAll(); },
+  async deletePriceHistory(id: string) { await runGas('deletePriceHistory', id); await this.fetchAll(); },
   async saveEnvelope(e: Envelope) { await runGas('saveEnvelope', e); await this.fetchAll(); },
   async withdrawEnvelope(w: EnvelopeWithdrawal) { await runGas('withdrawEnvelope', w); await this.fetchAll(); },
   async deleteWithdrawal(id: string) { await runGas('deleteWithdrawal', id); await this.fetchAll(); },
   async updateWithdrawal(w: EnvelopeWithdrawal) { await runGas('updateWithdrawal', w); await this.fetchAll(); },
-  async saveRestockNote(note: PurchaseNote) { const res = await runGas('savePurchaseNote', note); await this.fetchAll(); return res; },
-  async saveOutput(output: OutputTransaction) { await runGas('saveOutput', output); await this.fetchAll(); },
-  async saveOutputBatch(outputs: OutputTransaction[]) { await runGas('saveOutputBatch', outputs); await this.fetchAll(); },
-  async saveClosing(closing: DailyClosing) { await runGas('saveClosing', closing); await this.fetchAll(); },
+  async saveRestockNote(note: PurchaseNote) {
+    const res = await runGas('savePurchaseNote', note);
+    if (res && (res.success || res.note)) {
+      const data = res.data || res;
+      const newNote = data.note || (data.id ? data : note);
+      const newInputs = data.inputs || [];
+
+      this._purchaseNotes.unshift(newNote);
+      if (newInputs.length > 0) {
+        this._inputs.unshift(...newInputs.map((i: any) => ({ ...i, type: 'entry', notes: i.notes || '' })));
+      }
+
+      // Actualizar stock de productos
+      const details = JSON.parse(note.detailsJson || '[]');
+      details.forEach((item: any) => {
+        const product = this._products.find(p => p.id === String(item.productId) || p.code === item.code);
+        if (product) {
+          product.stock = (Number(product.stock) || 0) + (Number(item.quantity) || 0);
+          product.totalInputs = (Number(product.totalInputs) || 0) + (Number(item.quantity) || 0);
+          product.totalInvested = (Number(product.totalInvested) || 0) + (Number(item.totalCost) || 0);
+        }
+      });
+
+      // Si está pagado, restar de ENV4
+      if (note.status === 'Paid') {
+        const capitalEnv = this._envelopes.find(e => e.id === 'ENV4');
+        if (capitalEnv) {
+          capitalEnv.balance = (Number(capitalEnv.balance) || 0) - (Number(note.totalAmount) || 0);
+        }
+      }
+      this._notify();
+    }
+    return res;
+  },
+  async deletePurchaseNote(id: string) { await runGas('deletePurchaseNote', id); await this.fetchAll(); },
+  async saveOutputBatch(outputs: OutputTransaction[]) {
+    const res = await runGas('saveOutputBatch', outputs);
+    if (res && (res.success || Array.isArray(res))) {
+      const data = res.data || (Array.isArray(res) ? res : outputs);
+      const newOutputs = (Array.isArray(data) ? data : [data]).map((o: any) => ({ ...o, type: 'exit', notes: o.notes || '' }));
+      this._outputs.unshift(...newOutputs);
+
+      outputs.forEach(out => {
+        const product = this._products.find(p => p.id === String(out.productId));
+        if (product) {
+          product.stock = (Number(product.stock) || 0) - (Number(out.quantity) || 0);
+          product.totalOutputs = (Number(product.totalOutputs) || 0) + (Number(out.quantity) || 0);
+          product.totalEarned = (Number(product.totalEarned) || 0) + (Number(out.totalSale) || 0);
+        }
+      });
+      this._notify();
+    }
+    return res;
+  },
   async updateNoteStatus(id: string, status: string) { await runGas('updateNoteStatus', { id, status }); await this.fetchAll(); },
   async processPhysicalCount(counts: any[], shift: string) { const res = await runGas('processPhysicalCount', { counts, shift }); await this.fetchAll(); return res; },
   async sync() { await this.fetchAll(); return { success: true }; }

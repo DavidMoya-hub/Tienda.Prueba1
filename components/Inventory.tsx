@@ -21,10 +21,14 @@ const Inventory: React.FC = () => {
 
   const products = dataService.getProducts();
 
-  const filteredProducts = products.filter(p => 
-    p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.code?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredProducts = React.useMemo(() => {
+    const searchLower = searchTerm.toLowerCase();
+    return products.filter(p => {
+      const nameMatch = String(p.name || '').toLowerCase().includes(searchLower);
+      const codeMatch = String(p.code || '').toLowerCase().includes(searchLower);
+      return nameMatch || codeMatch;
+    });
+  }, [products, searchTerm]);
 
   const handleDelete = (id: string, name: string) => {
     setModal({

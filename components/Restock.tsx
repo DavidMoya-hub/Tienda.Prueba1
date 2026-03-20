@@ -32,10 +32,10 @@ const Restock: React.FC = () => {
 
   const filteredProducts = useMemo(() => {
     if (!searchTerm) return [];
+    const searchLower = searchTerm.toLowerCase();
     return products.filter(p => {
-      if (!p || !p.name) return false;
-      const nameMatch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
-      const codeMatch = p.code ? p.code.toString().includes(searchTerm) : false;
+      const nameMatch = String(p?.name || '').toLowerCase().includes(searchLower);
+      const codeMatch = String(p?.code || '').toLowerCase().includes(searchLower);
       return nameMatch || codeMatch;
     }).slice(0, 5);
   }, [products, searchTerm]);
