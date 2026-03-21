@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Calendar, ArrowUpCircle, ArrowDownCircle, Search, ClipboardList, Wallet, CheckCircle, Clock, AlertCircle, Edit, Trash2, X, Save } from 'lucide-react';
+import { Calendar, ArrowUpCircle, ArrowDownCircle, Search, ClipboardList, Wallet, CheckCircle, Clock, AlertCircle, Edit, Trash2, X, Save, Eye } from 'lucide-react';
 import { dataService } from '../services/dataService';
 import { InputTransaction, OutputTransaction, DailyClosing, PriceHistory, PurchaseNote } from '../types';
 
@@ -11,6 +11,7 @@ const HistoryView: React.FC = () => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [selectedNote, setSelectedNote] = useState<PurchaseNote | null>(null);
   
   const inputs = dataService.getInputs();
   const outputs = dataService.getOutputs();
@@ -54,9 +55,21 @@ const HistoryView: React.FC = () => {
   const sortedDebts = useMemo(() => filterAndSort(purchaseNotes, ['provider'] as any), [purchaseNotes, searchTerm, startDate, endDate, sortOrder]);
   const sortedAudit = useMemo(() => filterAndSort(priceHistory, ['productName', 'field'] as any), [priceHistory, searchTerm, startDate, endDate, sortOrder]);
 
+  const parseDetails = (json: string) => {
+    try {
+      return JSON.parse(json || '[]');
+    } catch (e) {
+      console.error("Error parsing detailsJson:", e);
+      return [];
+    }
+  };
+
   const handleMarkAsPaid = async (noteId: string) => {
     if (confirm("¿Marcar esta nota como PAGADA? Se usará el capital del Sobre 4.")) {
       await dataService.updateNoteStatus(noteId, 'Paid');
+      if (selectedNote?.id === noteId) {
+        setSelectedNote(null);
+      }
     }
   };
 
@@ -351,7 +364,11 @@ const HistoryView: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-blue-50 text-xs md:text-sm">
                 {sortedDebts.map(note => (
-                  <tr key={note.id} className={`hover:bg-slate-50 transition-colors group ${note.status === 'Pending' ? 'bg-amber-50/20' : ''}`}>
+                  <tr 
+                    key={note.id} 
+                    onClick={() => setSelectedNote(note)}
+                    className={`hover:bg-slate-50 transition-colors group cursor-pointer ${note.status === 'Pending' ? 'bg-amber-50/20' : ''}`}
+                  >
                     <td className="px-4 md:px-8 py-3 md:py-5 text-slate-400 font-bold">{new Date(note.date).toLocaleDateString()}</td>
                     <td className="px-4 md:px-8 py-3 md:py-5 font-black text-slate-800 text-base md:text-lg">{note.provider}</td>
                     <td className="px-4 md:px-8 py-3 md:py-5 font-black text-red-600 text-lg md:text-xl tracking-tighter">${Number(note.totalAmount).toLocaleString()}</td>
@@ -372,7 +389,7 @@ const HistoryView: React.FC = () => {
                       <div className="flex items-center justify-end space-x-4">
                         {note.status === 'Pending' && (
                           <button 
-                            onClick={() => handleMarkAsPaid(note.id)}
+                            onClick={(e) => { e.stopPropagation(); handleMarkAsPaid(note.id); }}
                             className="bg-blue-600 text-white px-4 md:px-8 py-2 md:py-3 rounded-xl md:rounded-2xl font-black text-[10px] md:text-xs hover:bg-blue-700 transition-all active:scale-95 shadow-xl shadow-blue-200 uppercase tracking-widest"
                           >
                             Liquidar Ahora
@@ -380,13 +397,20 @@ const HistoryView: React.FC = () => {
                         )}
                         <div className="flex items-center space-x-2">
                           <button 
-                            onClick={() => { setEditingItem({...note}); setEditType('Debt'); }}
+                            onClick={(e) => { e.stopPropagation(); setSelectedNote(note); }}
+                            className="p-2 text-amber-600 hover:bg-amber-100 rounded-xl transition-colors bg-amber-50"
+                            title="Ver Detalle"
+                          >
+                            <Eye size={16} />
+                          </button>
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); setEditingItem({...note}); setEditType('Debt'); }}
                             className="p-2 text-blue-600 hover:bg-blue-100 rounded-xl transition-colors bg-blue-50"
                           >
                             <Edit size={16} />
                           </button>
                           <button 
-                            onClick={() => handleDelete(note.id, 'Debt')}
+                            onClick={(e) => { e.stopPropagation(); handleDelete(note.id, 'Debt'); }}
                             className="p-2 text-red-600 hover:bg-red-100 rounded-xl transition-colors bg-red-50"
                           >
                             <Trash2 size={16} />
@@ -607,6 +631,101 @@ const HistoryView: React.FC = () => {
                 <span>Guardar Cambios</span>
               </button>
             </form>
+          </div>
+        </div>
+      )}
+      {selectedNote && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
+            <div className="bg-amber-600 p-6 md:p-8 text-white flex justify-between items-center">
+              <div>
+                <h3 className="text-xl md:text-2xl font-black tracking-tight">Detalle de Compra</h3>
+                <p className="text-amber-200 text-xs font-bold uppercase tracking-widest">{selectedNote.provider}</p>
+              </div>
+              <button onClick={() => setSelectedNote(null)} className="text-amber-200 hover:text-white transition-colors">
+                <X size={24} />
+              </button>
+            </div>
+            
+            <div className="p-6 md:p-8 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
+              <div className="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Fecha</label>
+                  <p className="font-black text-slate-800">{new Date(selectedNote.date).toLocaleDateString()}</p>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Estado</label>
+                  <p className={`font-black ${selectedNote.status === 'Paid' ? 'text-emerald-600' : 'text-amber-600'}`}>
+                    {selectedNote.status === 'Paid' ? 'LIQUIDADO' : 'PENDIENTE'}
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Nota</label>
+                  <p className="font-black text-slate-800 text-xl tracking-tighter">${Number(selectedNote.totalAmount).toLocaleString()}</p>
+                </div>
+                {selectedNote.status === 'Pending' && (
+                  <div className="flex items-end">
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleMarkAsPaid(selectedNote.id);
+                      }}
+                      className="w-full bg-blue-600 text-white py-2 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-200"
+                    >
+                      Liquidar Ahora
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-4">
+                <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
+                  <ClipboardList size={16} className="text-amber-600" />
+                  <span>Productos en esta nota</span>
+                </h4>
+                
+                <div className="border border-slate-100 rounded-2xl overflow-hidden">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 text-slate-400 font-black uppercase tracking-widest">
+                      <tr>
+                        <th className="px-4 py-3">Producto</th>
+                        <th className="px-4 py-3 text-center">Cant</th>
+                        <th className="px-4 py-3 text-right">Costo U.</th>
+                        <th className="px-4 py-3 text-right">Subtotal</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {parseDetails(selectedNote.detailsJson || '').map((item: any, idx: number) => (
+                        <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="px-4 py-3 font-bold text-slate-800">{item.productName}</td>
+                          <td className="px-4 py-3 text-center font-black text-blue-600">
+                            <span className="bg-blue-50 px-2 py-0.5 rounded-md">{item.quantity}</span>
+                          </td>
+                          <td className="px-4 py-3 text-right text-slate-500">${Number(item.unitCost || 0).toFixed(2)}</td>
+                          <td className="px-4 py-3 text-right font-black text-slate-900">${Number(item.totalCost || 0).toFixed(2)}</td>
+                        </tr>
+                      ))}
+                      {parseDetails(selectedNote.detailsJson || '').length === 0 && (
+                        <tr>
+                          <td colSpan={4} className="px-4 py-8 text-center text-slate-400 font-bold italic">
+                            No se encontraron detalles para esta nota.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-6 bg-slate-50 border-t border-slate-100">
+              <button 
+                onClick={() => setSelectedNote(null)}
+                className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black hover:bg-slate-800 transition-all shadow-xl shadow-slate-200 uppercase tracking-widest text-xs"
+              >
+                Cerrar Detalle
+              </button>
+            </div>
           </div>
         </div>
       )}
