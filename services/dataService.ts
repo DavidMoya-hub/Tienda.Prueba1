@@ -320,41 +320,47 @@ export const dataService = {
   async saveRestockNote(note: PurchaseNote) {
     const res = await runGas('savePurchaseNote', note);
     if (res && res.success) {
-      this._purchaseNotes = [note, ...this._purchaseNotes];
+      const isUpdate = this._purchaseNotes.some(n => n.id === note.id);
       const details = JSON.parse(note.detailsJson || '[]');
       
-      // Crear entradas individuales en el estado local
-      const newInputs: InputTransaction[] = details.map((item: any) => ({
-        id: "INP-" + Math.random().toString(36).substr(2, 9),
-        productId: item.productId,
-        productName: item.productName,
-        quantity: Number(item.quantity),
-        unitCost: Number(item.unitCost),
-        totalCost: Number(item.totalCost),
-        date: note.date,
-        provider: note.provider,
-        notes: "Compra: " + note.id,
-        type: 'entry'
-      }));
-      this._inputs = [...newInputs, ...this._inputs];
+      if (isUpdate) {
+        this._purchaseNotes = this._purchaseNotes.map(n => n.id === note.id ? note : n);
+      } else {
+        this._purchaseNotes = [note, ...this._purchaseNotes];
+        
+        // Crear entradas individuales en el estado local (Solo para notas nuevas)
+        const newInputs: InputTransaction[] = details.map((item: any) => ({
+          id: "INP-" + Math.random().toString(36).substr(2, 9),
+          productId: item.productId,
+          productName: item.productName,
+          quantity: Number(item.quantity),
+          unitCost: Number(item.unitCost),
+          totalCost: Number(item.totalCost),
+          date: note.date,
+          provider: note.provider,
+          notes: "Compra: " + note.id,
+          type: 'entry'
+        }));
+        this._inputs = [...newInputs, ...this._inputs];
 
-      this._products = this._products.map(p => {
-        const item = details.find((d: any) => String(d.productId) === String(p.id) || d.code === p.code);
-        if (item) {
-          return {
-            ...p,
-            stock: (Number(p.stock) || 0) + (Number(item.quantity) || 0),
-            totalInputs: (Number(p.totalInputs) || 0) + (Number(item.quantity) || 0),
-            totalInvested: (Number(p.totalInvested) || 0) + (Number(item.totalCost) || 0)
-          };
+        this._products = this._products.map(p => {
+          const item = details.find((d: any) => String(d.productId) === String(p.id) || d.code === p.code);
+          if (item) {
+            return {
+              ...p,
+              stock: (Number(p.stock) || 0) + (Number(item.quantity) || 0),
+              totalInputs: (Number(p.totalInputs) || 0) + (Number(item.quantity) || 0),
+              totalInvested: (Number(p.totalInvested) || 0) + (Number(item.totalCost) || 0)
+            };
+          }
+          return p;
+        });
+
+        if (note.status === 'Paid') {
+          this._envelopes = this._envelopes.map(e => 
+            e.id === 'ENV4' ? { ...e, balance: (Number(e.balance) || 0) - (Number(note.totalAmount) || 0) } : e
+          );
         }
-        return p;
-      });
-
-      if (note.status === 'Paid') {
-        this._envelopes = this._envelopes.map(e => 
-          e.id === 'ENV4' ? { ...e, balance: (Number(e.balance) || 0) - (Number(note.totalAmount) || 0) } : e
-        );
       }
       this._notify();
     }
@@ -448,10 +454,10 @@ export const dataService = {
       });
 
       // --- PASO C: LIMPIAR ENTRADAS EN ESTADO LOCAL ---
-      this._inputs = this._inputs.filter(i => !i.notes.includes(id));
+      const noteMatch = "Compra: " + id;
+      this._inputs = this._inputs.filter(i => i.notes !== noteMatch);
 
       // --- PASO D: REAPLICAR NUEVO EN ESTADO LOCAL ---
-      const noteMatch = "Compra: " + id;
       const newInputs: InputTransaction[] = newDetails.map((item: any) => ({
         id: "INP-" + Math.random().toString(36).substr(2, 9),
         productId: item.productId,

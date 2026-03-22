@@ -812,7 +812,7 @@ function saveInput(i) {
 
   if (noteRef.startsWith("Compra: ")) {
     const noteId = noteRef.replace("Compra: ", "").trim();
-    updateParentNoteAfterInputEdit(noteId, i.productId, diffCost, newQuantity, newTotalCost);
+    updateParentNoteAfterInputEdit(noteId, i.productId, diffCost, newQuantity, newUnitCost, newTotalCost);
   }
 
   // 3. Sobrescribir fila (PROHIBIDO usar appendRow para ediciones)
@@ -830,7 +830,7 @@ function saveInput(i) {
  * Actualiza el total y el JSON de detalles de una nota de compra tras editar un input individual.
  * CRÍTICO: Recalcula el totalAmount sumando los totalCost de todos los ítems.
  */
-function updateParentNoteAfterInputEdit(noteId, productId, diffCost, newQuantity, newTotalCost) {
+function updateParentNoteAfterInputEdit(noteId, productId, diffCost, newQuantity, newUnitCost, newTotalCost) {
   const sheet = getSheet("PurchaseNotes");
   const data = sheet.getDataRange().getValues();
   const searchId = noteId.toString().trim().toUpperCase();
@@ -845,7 +845,7 @@ function updateParentNoteAfterInputEdit(noteId, productId, diffCost, newQuantity
       // Actualizar el producto en el JSON de detalles
       const newDetails = details.map(item => {
         if (String(item.productId) === String(productId)) {
-          return { ...item, quantity: newQuantity, totalCost: newTotalCost };
+          return { ...item, quantity: newQuantity, unitCost: newUnitCost, totalCost: newTotalCost };
         }
         return item;
       });

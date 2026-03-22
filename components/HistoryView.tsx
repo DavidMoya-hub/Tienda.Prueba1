@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Calendar, ArrowUpCircle, ArrowDownCircle, Search, ClipboardList, Wallet, CheckCircle, Clock, AlertCircle, Edit, Trash2, X, Save, Eye } from 'lucide-react';
 import { dataService } from '../services/dataService';
 import { InputTransaction, OutputTransaction, DailyClosing, PriceHistory, PurchaseNote } from '../types';
+import Modal from './Modal';
 
 const HistoryView: React.FC = () => {
   const [tab, setTab] = useState<'Inputs' | 'Outputs' | 'Closings' | 'Audit' | 'Debts'>('Inputs');
@@ -15,6 +16,19 @@ const HistoryView: React.FC = () => {
   const [isEditingDetails, setIsEditingDetails] = useState(false);
   const [editedDetails, setEditedDetails] = useState<any[]>([]);
   
+  // Modal state
+  const [modal, setModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    type: 'success' | 'error' | 'warning' | 'info';
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'info'
+  });
+
   const inputs = dataService.getInputs();
   const outputs = dataService.getOutputs();
   const closings = dataService.getClosings();
@@ -74,9 +88,19 @@ const HistoryView: React.FC = () => {
 
   const handleQuantityChange = (index: number, newQty: number) => {
     const updated = [...editedDetails];
-    const item = updated[index];
+    const item = { ...updated[index] };
     item.quantity = newQty;
     item.totalCost = newQty * (Number(item.unitCost) || 0);
+    updated[index] = item;
+    setEditedDetails(updated);
+  };
+
+  const handleUnitCostChange = (index: number, newUnitCost: number) => {
+    const updated = [...editedDetails];
+    const item = { ...updated[index] };
+    item.unitCost = newUnitCost;
+    item.totalCost = (Number(item.quantity) || 0) * newUnitCost;
+    updated[index] = item;
     setEditedDetails(updated);
   };
 
@@ -94,16 +118,42 @@ const HistoryView: React.FC = () => {
       );
       setSelectedNote(null);
       setIsEditingDetails(false);
+      setModal({
+        isOpen: true,
+        title: 'Éxito',
+        message: 'Detalles de la nota actualizados correctamente.',
+        type: 'success'
+      });
     } catch (error) {
-      alert("Error al guardar cambios: " + error);
+      setModal({
+        isOpen: true,
+        title: 'Error',
+        message: 'Error al guardar cambios: ' + error,
+        type: 'error'
+      });
     }
   };
 
   const handleMarkAsPaid = async (noteId: string) => {
     if (confirm("¿Marcar esta nota como PAGADA? Se usará el capital del Sobre 4.")) {
-      await dataService.updateNoteStatus(noteId, 'Paid');
-      if (selectedNote?.id === noteId) {
-        setSelectedNote(null);
+      try {
+        await dataService.updateNoteStatus(noteId, 'Paid');
+        if (selectedNote?.id === noteId) {
+          setSelectedNote(null);
+        }
+        setModal({
+          isOpen: true,
+          title: 'Éxito',
+          message: 'Nota marcada como pagada correctamente.',
+          type: 'success'
+        });
+      } catch (error) {
+        setModal({
+          isOpen: true,
+          title: 'Error',
+          message: 'Error al liquidar nota: ' + error,
+          type: 'error'
+        });
       }
     }
   };
@@ -119,8 +169,19 @@ const HistoryView: React.FC = () => {
         case 'Debt': await dataService.deletePurchaseNote(id); break;
         case 'Audit': await dataService.deletePriceHistory(id); break;
       }
+      setModal({
+        isOpen: true,
+        title: 'Éxito',
+        message: 'Registro eliminado correctamente.',
+        type: 'success'
+      });
     } catch (error) {
-      alert("Error al eliminar: " + error);
+      setModal({
+        isOpen: true,
+        title: 'Error',
+        message: 'Error al eliminar: ' + error,
+        type: 'error'
+      });
     }
   };
 
@@ -138,8 +199,19 @@ const HistoryView: React.FC = () => {
       }
       setEditingItem(null);
       setEditType(null);
+      setModal({
+        isOpen: true,
+        title: 'Éxito',
+        message: 'Registro actualizado correctamente.',
+        type: 'success'
+      });
     } catch (error) {
-      alert("Error al guardar: " + error);
+      setModal({
+        isOpen: true,
+        title: 'Error',
+        message: 'Error al guardar: ' + error,
+        type: 'error'
+      });
     }
   };
 
@@ -756,7 +828,18 @@ const HistoryView: React.FC = () => {
                               <span className="bg-blue-50 px-2 py-0.5 rounded-md">{item.quantity}</span>
                             )}
                           </td>
-                          <td className="px-4 py-3 text-right text-slate-500">${Number(item.unitCost || 0).toFixed(2)}</td>
+                          <td className="px-4 py-3 text-right text-slate-500">
+                            {isEditingDetails ? (
+                              <input 
+                                type="number"
+                                value={item.unitCost}
+                                onChange={(e) => handleUnitCostChange(idx, Number(e.target.value))}
+                                className="w-20 bg-white border-2 border-blue-100 rounded-lg px-2 py-1 text-right outline-none focus:border-blue-500 transition-all"
+                              />
+                            ) : (
+                              `$${Number(item.unitCost || 0).toFixed(2)}`
+                            )}
+                          </td>
                           <td className="px-4 py-3 text-right font-black text-slate-900">${Number(item.totalCost || 0).toFixed(2)}</td>
                         </tr>
                       ))}
@@ -802,6 +885,14 @@ const HistoryView: React.FC = () => {
           </div>
         </div>
       )}
+
+      <Modal 
+        isOpen={modal.isOpen}
+        title={modal.title}
+        message={modal.message}
+        type={modal.type}
+        onClose={() => setModal({ ...modal, isOpen: false })}
+      />
     </div>
   );
 };
