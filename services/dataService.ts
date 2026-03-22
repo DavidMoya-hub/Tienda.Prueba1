@@ -161,17 +161,26 @@ export const dataService = {
       const oldQty = oldInput ? (Number(oldInput.quantity) || 0) : 0;
       const oldCost = oldInput ? (Number(oldInput.totalCost) || 0) : 0;
       
+      // Recalcular localmente totalCost = quantity * unitCost
       const newQty = Number(i.quantity) || 0;
-      const newCost = Number(i.totalCost) || 0;
+      const newUnitCost = Number(i.unitCost) || 0;
+      const newCost = newQty * newUnitCost;
+      
+      // Asegurar que el objeto modificado conserve su propiedad notes y el nuevo costo
+      const updatedInput = { 
+        ...i, 
+        totalCost: newCost,
+        notes: (i.notes && i.notes.trim() !== "") ? i.notes : (oldInput?.notes || "")
+      };
       
       const diffQty = newQty - oldQty;
       const diffCost = newCost - oldCost;
 
       // 1. Actualizar Inputs (map)
       if (oldInput) {
-        this._inputs = this._inputs.map(inp => inp.id === i.id ? { ...inp, ...i } : inp);
+        this._inputs = this._inputs.map(inp => inp.id === i.id ? updatedInput : inp);
       } else {
-        this._inputs = [i, ...this._inputs];
+        this._inputs = [updatedInput, ...this._inputs];
       }
 
       // 2. Actualizar Products (Delta)
@@ -187,15 +196,12 @@ export const dataService = {
         return p;
       });
 
-      // 3. Actualizar PurchaseNotes (Delta)
-      const noteRef = i.notes || (oldInput?.notes || "");
+      // 3. Actualizar PurchaseNotes (Delta y Recálculo)
+      const noteRef = updatedInput.notes;
       if (noteRef.startsWith("Compra: ")) {
         const noteId = noteRef.replace("Compra: ", "").trim();
         this._purchaseNotes = this._purchaseNotes.map(note => {
           if (note.id === noteId) {
-            const currentTotal = Number(note.totalAmount) || 0;
-            const newTotal = currentTotal + diffCost;
-            
             let details = [];
             try {
               details = JSON.parse(note.detailsJson || "[]");
@@ -208,10 +214,14 @@ export const dataService = {
               return item;
             });
 
+            // Recalcular totalAmount sumando todos los ítems
+            const newTotal = newDetails.reduce((acc: number, curr: any) => acc + (Number(curr.totalCost) || 0), 0);
+            const realDiff = newTotal - (Number(note.totalAmount) || 0);
+
             // Ajustar sobre 4 si estaba pagada
-            if (note.status === 'Paid' && diffCost !== 0) {
+            if (note.status === 'Paid' && realDiff !== 0) {
               this._envelopes = this._envelopes.map(env => 
-                env.id === 'ENV4' ? { ...env, balance: (Number(env.balance) || 0) - diffCost } : env
+                env.id === 'ENV4' ? { ...env, balance: (Number(env.balance) || 0) - realDiff } : env
               );
             }
 

@@ -793,8 +793,11 @@ function saveInput(i) {
     }
   }
 
+  // Recalcular matemáticamente: nuevoTotalCost = nuevaCantidad * nuevoCostoUnitario
   const newQuantity = parseAmount(i.quantity);
-  const newTotalCost = parseAmount(i.totalCost);
+  const newUnitCost = parseAmount(i.unitCost);
+  const newTotalCost = newQuantity * newUnitCost;
+  i.totalCost = newTotalCost; // Asegurar que el objeto tenga el valor calculado
   
   // Calcular Deltas
   const diffQty = newQuantity - oldQuantity;
@@ -803,8 +806,10 @@ function saveInput(i) {
   // 1. Actualizar el inventario (Products) enviando SOLO el Delta Cantidad
   updateProductStock(i.productId, diffQty, 0, true);
 
-  // 2. Actualizar Nota Padre
-  const noteRef = i.notes || oldNoteRef;
+  // 2. Actualizar Nota Padre (Preservar relación)
+  const noteRef = (i.notes && i.notes.trim() !== "") ? i.notes : oldNoteRef;
+  i.notes = noteRef; // Restaurar la columna notes intacta
+
   if (noteRef.startsWith("Compra: ")) {
     const noteId = noteRef.replace("Compra: ", "").trim();
     updateParentNoteAfterInputEdit(noteId, i.productId, diffCost, newQuantity, newTotalCost);
@@ -823,6 +828,7 @@ function saveInput(i) {
 
 /**
  * Actualiza el total y el JSON de detalles de una nota de compra tras editar un input individual.
+ * CRÍTICO: Recalcula el totalAmount sumando los totalCost de todos los ítems.
  */
 function updateParentNoteAfterInputEdit(noteId, productId, diffCost, newQuantity, newTotalCost) {
   const sheet = getSheet("PurchaseNotes");
@@ -831,9 +837,6 @@ function updateParentNoteAfterInputEdit(noteId, productId, diffCost, newQuantity
   
   for (let i = 1; i < data.length; i++) {
     if (data[i][0].toString().trim().toUpperCase() === searchId) {
-      const currentTotal = parseAmount(data[i][3]);
-      const newTotal = currentTotal + diffCost;
-      
       let details = [];
       try {
         details = JSON.parse(data[i][5] || "[]");
@@ -846,14 +849,19 @@ function updateParentNoteAfterInputEdit(noteId, productId, diffCost, newQuantity
         }
         return item;
       });
+
+      // CRÍTICO: Recalcular el totalAmount de toda la nota sumando los totalCost de todos los ítems
+      const newTotal = newDetails.reduce((acc, curr) => acc + (parseAmount(curr.totalCost) || 0), 0);
       
       sheet.getRange(i + 1, 4).setValue(newTotal); // totalAmount
       sheet.getRange(i + 1, 6).setValue(JSON.stringify(newDetails)); // detailsJson
       
-      // Si la nota estaba pagada, ajustar el sobre 4 (Capital)
+      // Si la nota estaba pagada, ajustar el sobre 4 (Capital) por la diferencia real
       const status = data[i][4];
-      if (status === 'Paid' && diffCost !== 0) {
-        updateEnvelopeBalance("ENV4", -diffCost);
+      const oldTotal = parseAmount(data[i][3]);
+      const realDiff = newTotal - oldTotal;
+      if (status === 'Paid' && realDiff !== 0) {
+        updateEnvelopeBalance("ENV4", -realDiff);
       }
       
       break;
