@@ -190,7 +190,8 @@ export const dataService = {
             ...p,
             stock: (Number(p.stock) || 0) + diffQty,
             totalInputs: (Number(p.totalInputs) || 0) + diffQty,
-            totalInvested: (Number(p.totalInvested) || 0) + diffCost
+            totalInvested: (Number(p.totalInvested) || 0) + diffCost,
+            costPrice: newUnitCost
           };
         }
         return p;
@@ -350,7 +351,8 @@ export const dataService = {
               ...p,
               stock: (Number(p.stock) || 0) + (Number(item.quantity) || 0),
               totalInputs: (Number(p.totalInputs) || 0) + (Number(item.quantity) || 0),
-              totalInvested: (Number(p.totalInvested) || 0) + (Number(item.totalCost) || 0)
+              totalInvested: (Number(p.totalInvested) || 0) + (Number(item.totalCost) || 0),
+              costPrice: Number(item.unitCost) || 0
             };
           }
           return p;
@@ -479,7 +481,8 @@ export const dataService = {
             ...p,
             stock: (Number(p.stock) || 0) + (Number(newItem.quantity) || 0),
             totalInputs: (Number(p.totalInputs) || 0) + (Number(newItem.quantity) || 0),
-            totalInvested: (Number(p.totalInvested) || 0) + (Number(newItem.totalCost) || 0)
+            totalInvested: (Number(p.totalInvested) || 0) + (Number(newItem.totalCost) || 0),
+            costPrice: Number(newItem.unitCost) || 0
           };
         }
         return p;

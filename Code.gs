@@ -328,6 +328,8 @@ function savePurchaseNote(note) {
         
         // Actualizar stock y totalInvested en Products
         updateProductStock(item.productId, parseAmount(item.quantity), parseAmount(item.totalCost), true);
+        // Actualizar precio de costo maestro
+        updateProductCostPrice(item.productId, parseAmount(item.unitCost));
       });
     } catch (e) {
       console.error("Error al procesar detalles de compra: " + e.message);
@@ -383,6 +385,28 @@ function updateProductStock(productId, quantity, amount, isInput) {
       }
       
       return { success: true, currentStock: finalStock };
+    }
+  }
+  return false;
+}
+
+/**
+ * Actualiza el precio de costo maestro de un producto.
+ */
+function updateProductCostPrice(productId, newCostPrice) {
+  const sheet = getSheet("Products");
+  const data = sheet.getDataRange().getValues();
+  if (data.length <= 1) return false;
+  
+  const headers = data[0];
+  const costPriceIdx = headers.indexOf("costPrice");
+  if (costPriceIdx === -1) return false;
+  
+  const searchId = productId.toString().trim().toUpperCase();
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0].toString().trim().toUpperCase() === searchId) {
+      sheet.getRange(i + 1, costPriceIdx + 1).setValue(Number(newCostPrice));
+      return true;
     }
   }
   return false;
@@ -480,6 +504,8 @@ function updatePurchaseNoteDetails(data) {
       return "";
     });
     inputSheet.appendRow(inputRow);
+    // Actualizar precio de costo maestro
+    updateProductCostPrice(item.productId, parseAmount(item.unitCost));
   });
 
   // Si la nota estaba pagada, ajustar el sobre 4 por la diferencia de total
@@ -805,6 +831,8 @@ function saveInput(i) {
   
   // 1. Actualizar el inventario (Products) enviando SOLO el Delta Cantidad
   updateProductStock(i.productId, diffQty, 0, true);
+  // Actualizar precio de costo maestro
+  updateProductCostPrice(i.productId, newUnitCost);
 
   // 2. Actualizar Nota Padre (Preservar relación)
   const noteRef = (i.notes && i.notes.trim() !== "") ? i.notes : oldNoteRef;
