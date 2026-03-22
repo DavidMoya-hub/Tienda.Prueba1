@@ -520,11 +520,15 @@ export const dataService = {
       const qtyToDelete = Number(itemToDelete.quantity) || 0;
       const costToDelete = Number(itemToDelete.totalCost) || 0;
 
-      // 1. Filtrar el ítem borrado de this._inputs
-      const noteMatch = "Compra: " + noteId;
-      this._inputs = this._inputs.filter(i => !(i.notes === noteMatch && String(i.productId) === String(productId)));
+      // 1. Filtrar el ítem borrado de this._inputs (Doble Condición)
+      this._inputs = this._inputs.filter(i => {
+        const isTargetNote = i.notes?.includes(noteId);
+        const isTargetProduct = String(i.productId) === String(productId);
+        // Mantenemos si NO coinciden ambos al mismo tiempo
+        return !(isTargetNote && isTargetProduct);
+      });
 
-      // 2. Restar la cantidad al stock en this._products
+      // 2. Restar la cantidad al stock en this._products (Solo para ese productId)
       this._products = this._products.map(p => {
         if (String(p.id) === String(productId)) {
           return {
@@ -537,14 +541,27 @@ export const dataService = {
         return p;
       });
 
-      // 3. Actualizar o eliminar la nota
-      if (res.destroyed) {
-        this._purchaseNotes = this._purchaseNotes.filter(n => n.id !== noteId);
-      } else {
-        this._purchaseNotes = this._purchaseNotes.map(n => 
-          n.id === noteId ? { ...n, totalAmount: res.newTotalAmount, detailsJson: res.newDetailsJson } : n
-        );
-      }
+      // 3. Actualizar o eliminar la nota (Lógica de Precisión Local)
+      const updatedNotes = this._purchaseNotes.map(n => {
+        if (n.id === noteId) {
+          const currentDetails = JSON.parse(n.detailsJson || '[]');
+          const filteredDetails = currentDetails.filter((p: any) => String(p.productId) !== String(productId));
+          const newTotal = (Number(n.totalAmount) || 0) - costToDelete;
+          
+          return {
+            ...n,
+            totalAmount: newTotal,
+            detailsJson: JSON.stringify(filteredDetails)
+          };
+        }
+        return n;
+      });
+
+      // Si el detailsJson resultante queda vacío, sacamos la nota
+      this._purchaseNotes = updatedNotes.filter(n => {
+        const details = JSON.parse(n.detailsJson || '[]');
+        return details.length > 0 && Number(n.totalAmount) > 0;
+      });
 
       this._notify();
     }

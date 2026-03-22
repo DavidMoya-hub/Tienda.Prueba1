@@ -970,19 +970,22 @@ function deleteItemFromPurchaseNote(data) {
   // Paso 3: Revertir stock
   updateProductStock(productId, qtyToDelete, costToDelete, false);
 
-  // Paso 4: Eliminar de Inputs
+  // Paso 4: Eliminar de Inputs (Borrado Quirúrgico)
   const inputSheet = getSheet("Inputs");
   const inputData = inputSheet.getDataRange().getValues();
-  const noteMatch = "Compra: " + noteId;
   for (let i = inputData.length - 1; i >= 1; i--) {
-    if (String(inputData[i][8]).trim() === noteMatch && String(inputData[i][1]) === String(productId)) {
+    const rowNotes = String(inputData[i][8]); // Columna 'notes'
+    const rowProductId = String(inputData[i][1]); // Columna 'productId'
+    
+    // CONDICIÓN DOBLE: El noteId debe estar en las notas Y el productId debe coincidir exactamente
+    if (rowNotes.includes(noteId) && rowProductId === String(productId)) {
       inputSheet.deleteRow(i + 1);
     }
   }
 
-  // Paso 5 & 6: Actualizar nota
+  // Paso 5 & 6: Actualizar nota (Extracción y Filtro Estricto)
   const newTotalAmount = totalAmount - costToDelete;
-  const newDetails = details.filter((_, idx) => idx !== itemIndex);
+  const newDetails = details.filter(p => String(p.productId) !== String(productId));
 
   // Paso 7: Condición de Destrucción
   if (newDetails.length === 0 || newTotalAmount <= 0) {
