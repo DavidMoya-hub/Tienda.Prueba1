@@ -274,7 +274,49 @@ export const dataService = {
     }
     return res;
   },
-  async deletePurchaseNote(id: string) { await runGas('deletePurchaseNote', id); await this.fetchAll(); },
+  async deletePurchaseNote(id: string) {
+    const res = await runGas('deletePurchaseNote', id);
+    if (res && res.success) {
+      const noteToDelete = this._purchaseNotes.find(n => n.id === id);
+      if (noteToDelete) {
+        // 1. Identificar inputs vinculados
+        const noteMatch = "Compra: " + id;
+        const linkedInputs = this._inputs.filter(i => i.notes === noteMatch);
+
+        // 2. Revertir stock de cada input vinculado
+        this._products = this._products.map(p => {
+          const inputsForThisProduct = linkedInputs.filter(i => String(i.productId) === String(p.id));
+          if (inputsForThisProduct.length > 0) {
+            const totalQty = inputsForThisProduct.reduce((acc, curr) => acc + (Number(curr.quantity) || 0), 0);
+            const totalCost = inputsForThisProduct.reduce((acc, curr) => acc + (Number(curr.totalCost) || 0), 0);
+            return {
+              ...p,
+              stock: (Number(p.stock) || 0) - totalQty,
+              totalInputs: (Number(p.totalInputs) || 0) - totalQty,
+              totalInvested: (Number(p.totalInvested) || 0) - totalCost
+            };
+          }
+          return p;
+        });
+
+        // 3. Eliminar inputs vinculados
+        this._inputs = this._inputs.filter(i => i.notes !== noteMatch);
+
+        // 4. Eliminar la nota
+        this._purchaseNotes = this._purchaseNotes.filter(n => n.id !== id);
+
+        // 5. Si estaba pagada, devolver capital al sobre 4
+        if (noteToDelete.status === 'Paid') {
+          this._envelopes = this._envelopes.map(e => 
+            e.id === 'ENV4' ? { ...e, balance: (Number(e.balance) || 0) + (Number(noteToDelete.totalAmount) || 0) } : e
+          );
+        }
+
+        this._notify();
+      }
+    }
+    return res;
+  },
   async saveOutputBatch(outputs: OutputTransaction[]) {
     const res = await runGas('saveOutputBatch', outputs);
     if (res && res.success) {

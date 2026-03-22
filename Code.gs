@@ -636,7 +636,7 @@ function deleteInput(id) {
       // 1. Restar del inventario maestro
       updateProductStock(productId, quantity, totalCost, false);
       
-      // 2. Si pertenece a una nota de compra, actualizar la nota padre
+      // 2. Actualización en Cascada Ascendente: Si pertenece a una nota, actualizarla
       if (noteRef.startsWith("Compra: ")) {
         const noteId = noteRef.replace("Compra: ", "").trim();
         updateParentNoteAfterInputDelete(noteId, productId, totalCost);
@@ -708,7 +708,57 @@ function deleteOutput(id) {
 
 function deleteClosing(id) { return {success: deleteRow("Closings", id)}; }
 function deletePriceHistory(id) { return {success: deleteRow("PriceHistory", id)}; }
-function deletePurchaseNote(id) { return {success: deleteRow("PurchaseNotes", id)}; }
+function deletePurchaseNote(id) {
+  const noteId = id.toString().trim();
+  const noteSheet = getSheet("PurchaseNotes");
+  const noteData = noteSheet.getDataRange().getValues();
+  const searchId = noteId.toUpperCase();
+  
+  let noteFound = false;
+  let noteRow = -1;
+  let noteStatus = "";
+  let noteTotal = 0;
+
+  for (let i = 1; i < noteData.length; i++) {
+    if (noteData[i][0].toString().trim().toUpperCase() === searchId) {
+      noteFound = true;
+      noteRow = i + 1;
+      noteStatus = noteData[i][4];
+      noteTotal = parseAmount(noteData[i][3]);
+      break;
+    }
+  }
+
+  if (!noteFound) return { success: false, error: "Nota no encontrada" };
+
+  const inputSheet = getSheet("Inputs");
+  const inputData = inputSheet.getDataRange().getValues();
+  const noteMatch = "Compra: " + noteId;
+  
+  // 1. Borrado en Cascada Descendente: Buscar y revertir inputs hijos
+  for (let i = inputData.length - 1; i >= 1; i--) {
+    if (String(inputData[i][8]).trim() === noteMatch) {
+      const productId = inputData[i][1];
+      const quantity = parseAmount(inputData[i][3]);
+      const totalCost = parseAmount(inputData[i][5]);
+      
+      // Restar del inventario
+      updateProductStock(productId, quantity, totalCost, false);
+      
+      // Eliminar fila de input
+      inputSheet.deleteRow(i + 1);
+    }
+  }
+  
+  // 2. Si estaba pagada, devolver capital al sobre 4
+  if (noteStatus === 'Paid') {
+    updateEnvelopeBalance("ENV4", noteTotal);
+  }
+
+  // 3. Eliminar la nota padre
+  noteSheet.deleteRow(noteRow);
+  return { success: true };
+}
 
 function saveClosing(c) {
   const headers = ["id", "date", "totalSold", "netProfit", "cogs"];
