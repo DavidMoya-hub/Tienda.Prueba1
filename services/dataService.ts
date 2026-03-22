@@ -1,6 +1,6 @@
 import { Product, InputTransaction, OutputTransaction, DailyClosing, PriceHistory, PurchaseNote, Envelope, EnvelopeWithdrawal } from "../types";
 
-const API_URL = "https://script.google.com/macros/s/AKfycby8XHw6-lWo1w0XeuCT-7ALk8lTW1obqpNQp6L4LKP9fLNNbGRDI_jCQea-1EGfZIhrXA/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbwZPC2staRal3M6E9Kbd80c56lHo2YdJrmKuJ4SIAvpbykG8NELGyUpsTz4BKhZPADFlA/exec";
 
 declare var google: any;
 
@@ -100,10 +100,21 @@ export const dataService = {
       }));
       this._envelopes = Array.isArray(envelopes) ? envelopes : [];
       this._envelopeHistory = Array.isArray(envHistory) ? envHistory : [];
-      this._purchaseNotes = Array.isArray(purchaseNotes) ? purchaseNotes : [];
+      this._purchaseNotes = (Array.isArray(purchaseNotes) ? purchaseNotes : []).map((n: any) => ({
+        ...n,
+        totalAmount: Number(n.totalAmount || 0),
+        paymentSource: n.paymentSource || 'Capital'
+      }));
       this._inputs = (Array.isArray(inputs) ? inputs : []).map((i: any) => ({ ...i, type: 'entry', notes: i.notes || '' }));
       this._outputs = (Array.isArray(outputs) ? outputs : []).map((o: any) => ({ ...o, type: 'exit', notes: o.notes || '' }));
-      this._closings = Array.isArray(closings) ? closings : [];
+      this._closings = (Array.isArray(closings) ? closings : []).map((c: any) => ({
+        ...c,
+        totalSold: Number(c.totalSold || 0),
+        netProfit: Number(c.netProfit || 0),
+        cogs: Number(c.cogs || 0),
+        debtsPaid: Number(c.debtsPaid || 0),
+        cashInBox: Number(c.cashInBox || 0)
+      }));
       this._priceHistory = Array.isArray(priceHistory) ? priceHistory : [];
       
       this._notify();
@@ -306,12 +317,22 @@ export const dataService = {
   async saveClosing(c: DailyClosing) {
     const res = await runGas('saveClosing', c);
     if (res && res.success) {
-      this._closings = [c, ...this._closings];
+      this._closings = [c, ...this._closings.filter(cl => cl.id !== c.id)];
       this._notify();
     }
     return res;
   },
-  async deleteClosing(id: string) { await runGas('deleteClosing', id); await this.fetchAll(); },
+  async updateClosing(c: DailyClosing) {
+    return this.saveClosing(c);
+  },
+  async deleteClosing(id: string) {
+    const res = await runGas('deleteClosing', id);
+    if (res && res.success) {
+      this._closings = this._closings.filter(c => c.id !== id);
+      this._notify();
+    }
+    return res;
+  },
   async savePriceHistory(h: PriceHistory) { await runGas('savePriceHistory', h); await this.fetchAll(); },
   async deletePriceHistory(id: string) { await runGas('deletePriceHistory', id); await this.fetchAll(); },
   async saveEnvelope(e: Envelope) { await runGas('saveEnvelope', e); await this.fetchAll(); },
@@ -431,7 +452,33 @@ export const dataService = {
     }
     return res;
   },
-  async updateNoteStatus(id: string, status: string) { await runGas('updateNoteStatus', { id, status }); await this.fetchAll(); },
+  async updateNoteStatus(id: string, status: 'Paid' | 'Pending', source: 'Sales' | 'Capital' = 'Capital') {
+    const res = await runGas('updateNoteStatus', { id, status, source });
+    if (res && res.success) {
+      const note = this._purchaseNotes.find(n => n.id === id);
+      if (note) {
+        // Si pasa a Paid y el origen es Capital (Sobre 4)
+        if (status === 'Paid' && note.status === 'Pending' && source === 'Capital') {
+          this._envelopes = this._envelopes.map(e => 
+            e.id === 'ENV4' ? { ...e, balance: (Number(e.balance) || 0) - (Number(note.totalAmount) || 0) } : e
+          );
+        }
+        // Si pasa a Pending, devolver al sobre 4 solo si el origen era Capital
+        else if (status === 'Pending' && note.status === 'Paid') {
+          const oldSource = note.paymentSource || 'Capital';
+          if (oldSource === 'Capital') {
+            this._envelopes = this._envelopes.map(e => 
+              e.id === 'ENV4' ? { ...e, balance: (Number(e.balance) || 0) + (Number(note.totalAmount) || 0) } : e
+            );
+          }
+        }
+        
+        this._purchaseNotes = this._purchaseNotes.map(n => n.id === id ? { ...n, status, paymentSource: source } : n);
+        this._notify();
+      }
+    }
+    return res;
+  },
   async updatePurchaseNoteDetails(id: string, totalAmount: number, detailsJson: string) {
     const res = await runGas('updatePurchaseNoteDetails', { id, totalAmount, detailsJson });
     if (res && res.success) {

@@ -63,7 +63,7 @@ function doPost(e) {
       case 'saveOutputBatch': result = saveOutputBatch(data); break;
       case 'saveClosing': result = saveClosing(data); break;
       case 'savePriceHistory': result = savePriceHistory(data); break;
-      case 'updateNoteStatus': result = updateNoteStatus(data.id, data.status); break;
+      case 'updateNoteStatus': result = updateNoteStatus(data.id, data.status, data.source); break;
       case 'updatePurchaseNoteDetails': result = updatePurchaseNoteDetails(data); break;
       case 'processPhysicalCount': result = processPhysicalCount(data.counts, data.shift); break;
       
@@ -298,7 +298,7 @@ function savePurchaseNote(note) {
     }
   }
 
-  const headers = ["id", "date", "provider", "totalAmount", "status", "detailsJson"];
+  const headers = ["id", "date", "provider", "totalAmount", "status", "detailsJson", "paymentSource"];
   const amount = parseAmount(note.totalAmount);
   
   upsertToSheet("PurchaseNotes", headers, {...note, totalAmount: amount}, "id");
@@ -412,17 +412,35 @@ function updateProductCostPrice(productId, newCostPrice) {
   return false;
 }
 
-function updateNoteStatus(id, status) {
+function updateNoteStatus(id, status, source) {
   const sheet = getSheet("PurchaseNotes");
   const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const statusIdx = headers.indexOf("status");
+  const sourceIdx = headers.indexOf("paymentSource");
+  const amountIdx = headers.indexOf("totalAmount");
+  
   const searchId = id.toString().trim().toUpperCase();
   for(let i = 1; i < data.length; i++) {
     if(data[i][0].toString().trim().toUpperCase() === searchId) {
-      if (data[i][4] !== 'Paid' && status === 'Paid') {
-        const amount = parseAmount(data[i][3]);
-        updateEnvelopeBalance("ENV4", -amount);
+      const oldStatus = data[i][statusIdx];
+      const amount = parseAmount(data[i][amountIdx]);
+
+      if (oldStatus !== 'Paid' && status === 'Paid') {
+        if (source === 'Capital') {
+          updateEnvelopeBalance("ENV4", -amount);
+        }
+      } else if (oldStatus === 'Paid' && status === 'Pending') {
+        const oldSource = sourceIdx > -1 ? data[i][sourceIdx] : 'Capital';
+        if (oldSource === 'Capital') {
+          updateEnvelopeBalance("ENV4", amount);
+        }
       }
-      sheet.getRange(i + 1, 5).setValue(status);
+      
+      sheet.getRange(i + 1, statusIdx + 1).setValue(status);
+      if (sourceIdx > -1) {
+        sheet.getRange(i + 1, sourceIdx + 1).setValue(source || "");
+      }
       return {success: true};
     }
   }
@@ -794,7 +812,7 @@ function deletePurchaseNote(id) {
 }
 
 function saveClosing(c) {
-  const headers = ["id", "date", "totalSold", "netProfit", "cogs"];
+  const headers = ["id", "date", "totalSold", "netProfit", "cogs", "debtsPaid", "cashInBox", "notes"];
   return upsertToSheet("Closings", headers, c, "id");
 }
 

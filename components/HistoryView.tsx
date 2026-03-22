@@ -452,13 +452,15 @@ const HistoryView: React.FC = () => {
 
         {tab === 'Closings' && (
           <div className="overflow-x-auto">
-            <table className="w-full text-left min-w-[600px]">
+            <table className="w-full text-left min-w-[800px]">
               <thead className="bg-blue-50/50 text-blue-900/40 text-[8px] md:text-[10px] font-black uppercase tracking-[0.2em]">
                 <tr>
                   <th className="px-4 md:px-8 py-4 md:py-6">Fecha Corte</th>
                   <th className="px-4 md:px-8 py-4 md:py-6">Venta Bruta</th>
                   <th className="px-4 md:px-8 py-4 md:py-6">Costo Inv (COGS)</th>
                   <th className="px-4 md:px-8 py-4 md:py-6">Utilidad Neta</th>
+                  <th className="px-4 md:px-8 py-4 md:py-6">Deudas Pagadas</th>
+                  <th className="px-4 md:px-8 py-4 md:py-6">Efectivo Caja</th>
                   <th className="px-4 md:px-8 py-4 md:py-6 text-right">Acciones</th>
                 </tr>
               </thead>
@@ -468,7 +470,9 @@ const HistoryView: React.FC = () => {
                     <td className="px-4 md:px-8 py-3 md:py-5 font-black text-slate-800">{new Date(log.date).toLocaleString()}</td>
                     <td className="px-4 md:px-8 py-3 md:py-5 text-blue-600 font-black text-lg md:text-xl tracking-tighter">${Number(log.totalSold)?.toLocaleString()}</td>
                     <td className="px-4 md:px-8 py-3 md:py-5 text-slate-400 font-bold">-${Number(log.cogs)?.toLocaleString()}</td>
-                    <td className="px-4 md:px-8 py-3 md:py-5 text-red-600 font-black text-lg md:text-xl tracking-tighter">${Number(log.netProfit)?.toLocaleString()}</td>
+                    <td className="px-4 md:px-8 py-3 md:py-5 text-emerald-600 font-black text-lg md:text-xl tracking-tighter">${Number(log.netProfit)?.toLocaleString()}</td>
+                    <td className="px-4 md:px-8 py-3 md:py-5 text-red-600 font-bold">${Number(log.debtsPaid || 0)?.toLocaleString()}</td>
+                    <td className="px-4 md:px-8 py-3 md:py-5 text-blue-900 font-black text-lg md:text-xl tracking-tighter">${Number(log.cashInBox || log.totalSold)?.toLocaleString()}</td>
                     <td className="px-4 md:px-8 py-3 md:py-5 text-right">
                       <div className="flex items-center justify-end space-x-2">
                         <button 
@@ -679,23 +683,45 @@ const HistoryView: React.FC = () => {
 
                 {editType === 'Closing' && (
                   <>
-                    <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Venta Total</label>
-                      <input 
-                        type="number" 
-                        value={editingItem.totalSold}
-                        onChange={e => setEditingItem({...editingItem, totalSold: Number(e.target.value)})}
-                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-bold focus:border-blue-500 outline-none transition-all"
-                      />
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Venta Total</label>
+                        <input 
+                          type="number" 
+                          value={editingItem.totalSold}
+                          onChange={e => setEditingItem({...editingItem, totalSold: Number(e.target.value)})}
+                          className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-bold focus:border-blue-500 outline-none transition-all"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Utilidad Neta</label>
+                        <input 
+                          type="number" 
+                          value={editingItem.netProfit}
+                          onChange={e => setEditingItem({...editingItem, netProfit: Number(e.target.value)})}
+                          className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-bold focus:border-blue-500 outline-none transition-all"
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Utilidad Neta</label>
-                      <input 
-                        type="number" 
-                        value={editingItem.netProfit}
-                        onChange={e => setEditingItem({...editingItem, netProfit: Number(e.target.value)})}
-                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-bold focus:border-blue-500 outline-none transition-all"
-                      />
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Deudas Pagadas</label>
+                        <input 
+                          type="number" 
+                          value={editingItem.debtsPaid}
+                          onChange={e => setEditingItem({...editingItem, debtsPaid: Number(e.target.value)})}
+                          className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-bold focus:border-blue-500 outline-none transition-all"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Efectivo Caja</label>
+                        <input 
+                          type="number" 
+                          value={editingItem.cashInBox}
+                          onChange={e => setEditingItem({...editingItem, cashInBox: Number(e.target.value)})}
+                          className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-bold focus:border-blue-500 outline-none transition-all"
+                        />
+                      </div>
                     </div>
                   </>
                 )}

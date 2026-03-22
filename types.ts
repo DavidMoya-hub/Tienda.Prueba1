@@ -52,6 +52,7 @@ export interface PurchaseNote {
   totalAmount: number;
   status: 'Paid' | 'Pending';
   detailsJson: string;
+  paymentSource?: 'Sales' | 'Capital';
 }
 
 export interface InputTransaction {
@@ -87,7 +88,10 @@ export interface DailyClosing {
   date: string;
   totalSold: number;
   netProfit: number;
-  cogs: number; 
+  cogs: number;
+  debtsPaid: number;
+  cashInBox: number;
+  notes?: string;
 }
 
 export interface OCRResult {
