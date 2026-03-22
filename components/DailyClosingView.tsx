@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { DollarSign, Tag, Calculator, Save, Check, ArrowRightCircle, CreditCard, Wallet, X, PlusCircle, Minus, Plus, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { DollarSign, Tag, Calculator, Save, Check, ArrowRightCircle, CreditCard, Wallet, X, PlusCircle, Minus, Plus, AlertCircle, ChevronDown, ChevronUp, RefreshCcw, Search } from 'lucide-react';
 import { dataService } from '../services/dataService';
 import { OutputTransaction, PurchaseNote, DailyClosing } from '../types';
 
@@ -15,6 +15,15 @@ const DailyClosingView: React.FC = () => {
   const [saved, setSaved] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [notes, setNotes] = useState('');
+  const [draftAvailable, setDraftAvailable] = useState(false);
+
+  useEffect(() => {
+    const checkDraft = () => {
+      setDraftAvailable(dataService.getDraftPhysicalCount().length > 0);
+    };
+    checkDraft();
+    return dataService.subscribe(checkDraft);
+  }, []);
 
   // Find the last closing date to filter outputs
   const lastClosingDate = useMemo(() => {
@@ -88,6 +97,29 @@ const DailyClosingView: React.FC = () => {
     setDebtPaymentMethods(prev => ({ ...prev, [id]: method }));
   };
 
+  const loadPhysicalCount = () => {
+    const draft = dataService.getDraftPhysicalCount();
+    if (draft.length === 0) return;
+    
+    const newSales = draft.map(item => {
+      const prod = products.find(p => String(p.id) === String(item.productId));
+      const cost = prod ? (Number(prod.costPrice) || 0) : 0;
+      return {
+        id: item.id,
+        productId: item.productId,
+        name: item.productName,
+        quantity: item.quantity,
+        salePrice: item.salePrice,
+        costPrice: cost,
+        totalSale: item.totalSale,
+        totalCost: cost * item.quantity
+      };
+    });
+    
+    setManualSales(prev => [...prev, ...newSales]);
+    dataService.setDraftPhysicalCount([]); // Limpiar tras cargar
+  };
+
   // Financial Calculations
   const periodSalesTotal = periodOutputs.reduce((acc, o) => acc + (Number(o.totalSale) || 0), 0);
   const manualSalesTotal = manualSales.reduce((acc, i) => acc + i.totalSale, 0);
@@ -117,39 +149,42 @@ const DailyClosingView: React.FC = () => {
 
   const handleClosing = async () => {
     try {
-      // 1. Save manual sales as outputs
-      if (manualSales.length > 0) {
-        const outputs: OutputTransaction[] = manualSales.map(item => ({
-          id: item.id,
-          productId: item.productId,
-          productName: item.name,
-          quantity: item.quantity,
-          salePrice: item.salePrice,
-          totalSale: item.totalSale,
+      const closingId = Math.random().toString(36).substr(2, 9);
+      
+      // 1. Preparar lista de productos (Ventas del periodo + Manuales)
+      const productsList = [
+        ...periodOutputs.map(o => ({
+          productId: o.productId,
+          quantity: o.quantity,
+          totalSale: o.totalSale
+        })),
+        ...manualSales.map(s => ({
+          productId: s.productId,
+          quantity: s.quantity,
+          totalSale: s.totalSale
+        }))
+      ];
+
+      // 2. Preparar deudas a pagar
+      const debtsToPayList = debtsToPay.map(n => ({
+        id: n.id,
+        method: debtPaymentMethods[n.id] || 'Sales'
+      }));
+
+      // 3. Ejecutar Cierre Maestro
+      await dataService.saveMasterClosing({
+        closing: {
+          id: closingId,
           date: new Date().toISOString(),
-          shift: 'General',
-          notes: 'Venta manual en cierre', 
-          type: 'exit'
-        }));
-        await dataService.saveOutputBatch(outputs);
-      }
-
-      // 2. Process debt payments
-      for (const note of debtsToPay) {
-        const method = debtPaymentMethods[note.id] || 'Sales';
-        await dataService.updateNoteStatus(note.id, 'Paid', method);
-      }
-
-      // 3. Save closing report
-      await dataService.saveClosing({
-        id: Math.random().toString(36).substr(2, 9),
-        date: new Date().toISOString(),
-        totalSold,
-        cogs: totalCOGS,
-        netProfit,
-        debtsPaid: debtsPaidWithSales + debtsPaidWithCapital,
-        cashInBox,
-        notes: notes || `Cierre general. Deudas pagadas: ${debtsToPay.length}`
+          totalSold,
+          cogs: totalCOGS,
+          netProfit,
+          debtsPaid: debtsPaidWithSales + debtsPaidWithCapital,
+          cashInBox,
+          notes: notes || `Cierre Maestro. Deudas pagadas: ${debtsToPay.length}`
+        },
+        products: productsList,
+        debtsToPay: debtsToPayList
       });
 
       setSaved(true);
@@ -211,9 +246,20 @@ const DailyClosingView: React.FC = () => {
 
           {/* Manual Sales Entry */}
           <div className="bg-white p-6 md:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-4">
-            <h3 className="text-lg font-black text-slate-800 flex items-center space-x-2">
-              <PlusCircle className="text-blue-500" size={20} />
-              <span>Agregar Ventas Faltantes</span>
+            <h3 className="text-lg font-black text-slate-800 flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <PlusCircle className="text-blue-500" size={20} />
+                <span>Agregar Ventas Faltantes</span>
+              </div>
+              {draftAvailable && (
+                <button 
+                  onClick={loadPhysicalCount}
+                  className="flex items-center gap-2 bg-amber-500 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-amber-600 transition-all shadow-lg shadow-amber-200"
+                >
+                  <RefreshCcw size={14} />
+                  Cargar Conteo Físico
+                </button>
+              )}
             </h3>
             <div className="relative">
               <input 

@@ -62,6 +62,8 @@ function doPost(e) {
       case 'saveOutput': result = saveOutput(data); break;
       case 'saveOutputBatch': result = saveOutputBatch(data); break;
       case 'saveClosing': result = saveClosing(data); break;
+      case 'saveMasterClosing': result = saveMasterClosing(data); break;
+      case 'updateClosing': result = updateClosing(data.id, data.newData); break;
       case 'savePriceHistory': result = savePriceHistory(data); break;
       case 'updateNoteStatus': result = updateNoteStatus(data.id, data.status, data.source); break;
       case 'updatePurchaseNoteDetails': result = updatePurchaseNoteDetails(data); break;
@@ -757,7 +759,136 @@ function deleteOutput(id) {
   return {success: false, error: "No encontrado"};
 }
 
-function deleteClosing(id) { return {success: deleteRow("Closings", id)}; }
+function saveMasterClosing(data) {
+  const { closing, products, debtsToPay } = data;
+  const outSheet = getSheet("Outputs");
+  const closingSheet = getSheet("Closings");
+  
+  // 1. Actualizar stock de productos
+  products.forEach(item => {
+    updateProductStock(item.productId, parseAmount(item.quantity), parseAmount(item.totalSale), false);
+  });
+  
+  // 2. Crear registro único en Outputs
+  const outputId = "OUT-" + Utilities.getUuid();
+  const outputHeaders = ["id", "productId", "productName", "quantity", "salePrice", "totalSale", "date", "shift", "notes", "type", "soldProductsJson"];
+  const outputRow = outputHeaders.map(h => {
+    if (h === 'id') return outputId;
+    if (h === 'productId') return "MASTER";
+    if (h === 'productName') return "Cierre Maestro";
+    if (h === 'quantity') return 0;
+    if (h === 'salePrice') return 0;
+    if (h === 'totalSale') return parseAmount(closing.totalSold);
+    if (h === 'date') return closing.date;
+    if (h === 'shift') return "General";
+    if (h === 'notes') return "Cierre Maestro: " + closing.id;
+    if (h === 'type') return "exit";
+    if (h === 'soldProductsJson') return JSON.stringify(products);
+    return "";
+  });
+  outSheet.appendRow(outputRow);
+  
+  // 3. Procesar deudas
+  const paidDebtIds = debtsToPay.map(d => d.id);
+  debtsToPay.forEach(debt => {
+    updateNoteStatus(debt.id, 'Paid', debt.method);
+  });
+  
+  // 4. Guardar el cierre maestro
+  const closingHeaders = ["id", "date", "totalSold", "netProfit", "cogs", "debtsPaid", "cashInBox", "notes", "paidDebtIds"];
+  upsertToSheet("Closings", closingHeaders, { ...closing, paidDebtIds: JSON.stringify(paidDebtIds) }, "id");
+  
+  // 5. Distribuir utilidad en sobres
+  const profit = parseAmount(closing.netProfit);
+  const cogs = parseAmount(closing.cogs);
+  
+  updateEnvelopeBalance("ENV4", cogs);
+  if (profit > 0) {
+    const part = profit / 3;
+    ["ENV1", "ENV2", "ENV3"].forEach(id => updateEnvelopeBalance(id, part));
+  }
+  
+  return { success: true };
+}
+
+function deleteClosing(id) {
+  const closingSheet = getSheet("Closings");
+  const closingData = closingSheet.getDataRange().getValues();
+  const closingHeaders = closingData[0];
+  const searchId = id.toString().trim().toUpperCase();
+  
+  let closingRow = -1;
+  let closingObj = {};
+  
+  for (let i = 1; i < closingData.length; i++) {
+    if (closingData[i][0].toString().trim().toUpperCase() === searchId) {
+      closingRow = i + 1;
+      closingHeaders.forEach((h, idx) => {
+        closingObj[h] = closingData[i][idx];
+      });
+      break;
+    }
+  }
+  
+  if (closingRow === -1) return { error: "Cierre no encontrado" };
+  
+  // 1. Buscar el output maestro asociado para obtener los productos
+  const outSheet = getSheet("Outputs");
+  const outData = outSheet.getDataRange().getValues();
+  const noteMatch = "Cierre Maestro: " + id;
+  
+  let soldProducts = [];
+  let outRow = -1;
+  
+  for (let i = outData.length - 1; i >= 1; i--) {
+    if (String(outData[i][8]).trim() === noteMatch) {
+      outRow = i + 1;
+      // El JSON de productos está en la columna 11 (índice 10)
+      const jsonStr = outData[i][10]; 
+      try {
+        soldProducts = JSON.parse(jsonStr);
+      } catch(e) {}
+      break;
+    }
+  }
+  
+  // 2. Revertir Stock
+  soldProducts.forEach(item => {
+    updateProductStock(item.productId, parseAmount(item.quantity), parseAmount(item.totalSale), true);
+  });
+  
+  // 3. Revertir Deudas
+  let revertNotes = [];
+  try {
+    revertNotes = JSON.parse(closingObj.paidDebtIds || "[]");
+  } catch(e) {}
+  
+  revertNotes.forEach(noteId => {
+    updateNoteStatus(noteId, 'Pending', 'Capital');
+  });
+  
+  // 4. Revertir Sobres
+  const profit = parseAmount(closingObj.netProfit);
+  const cogs = parseAmount(closingObj.cogs);
+  
+  updateEnvelopeBalance("ENV4", -cogs);
+  if (profit > 0) {
+    const part = profit / 3;
+    ["ENV1", "ENV2", "ENV3"].forEach(id => updateEnvelopeBalance(id, -part));
+  }
+  
+  // 5. Borrar registros
+  if (outRow > -1) outSheet.deleteRow(outRow);
+  closingSheet.deleteRow(closingRow);
+  
+  return { success: true, revertProducts: soldProducts, revertNotes: revertNotes };
+}
+function updateClosing(id, newData) {
+  const delRes = deleteClosing(id);
+  if (delRes.error) return delRes;
+  return saveMasterClosing(newData);
+}
+
 function deletePriceHistory(id) { return {success: deleteRow("PriceHistory", id)}; }
 function deletePurchaseNote(id) {
   const noteId = id.toString().trim();
@@ -1024,8 +1155,8 @@ function setupSheet() {
     "EnvelopeHistory": ["id", "envelopeId", "envelopeName", "amount", "startDate", "endDate", "durationText", "notes"],
     "PurchaseNotes": ["id", "date", "provider", "totalAmount", "status", "detailsJson"],
     "Inputs": ["id", "productId", "productName", "quantity", "unitCost", "totalCost", "date", "provider", "notes", "type"],
-    "Outputs": ["id", "productId", "productName", "quantity", "salePrice", "totalSale", "date", "shift", "notes", "type"],
-    "Closings": ["id", "date", "totalSold", "netProfit", "cogs"],
+    "Outputs": ["id", "productId", "productName", "quantity", "salePrice", "totalSale", "date", "shift", "notes", "type", "soldProductsJson"],
+    "Closings": ["id", "date", "totalSold", "netProfit", "cogs", "debtsPaid", "cashInBox", "notes", "paidDebtIds"],
     "PriceHistory": ["id", "productId", "productName", "field", "oldValue", "newValue", "date"]
   };
   for (let name in sheets) {

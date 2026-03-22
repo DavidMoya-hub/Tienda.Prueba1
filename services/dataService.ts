@@ -65,6 +65,7 @@ export const dataService = {
   _outputs: [] as OutputTransaction[],
   _closings: [] as DailyClosing[],
   _priceHistory: [] as PriceHistory[],
+  _draftPhysicalCount: [] as OutputTransaction[],
   _listeners: [] as (() => void)[],
 
   subscribe(listener: () => void) {
@@ -132,6 +133,11 @@ export const dataService = {
   getOutputs() { return this._outputs; },
   getClosings() { return this._closings; },
   getPriceHistory() { return this._priceHistory; },
+  getDraftPhysicalCount() { return this._draftPhysicalCount; },
+  setDraftPhysicalCount(draft: OutputTransaction[]) {
+    this._draftPhysicalCount = draft;
+    this._notify();
+  },
 
   async getDashboardData() {
     const envelopes = this._envelopes;
@@ -322,13 +328,140 @@ export const dataService = {
     }
     return res;
   },
-  async updateClosing(c: DailyClosing) {
-    return this.saveClosing(c);
+  async updateClosing(id: string, newData: any) {
+    const res = await runGas('updateClosing', { id, newData });
+    if (res && res.success) {
+      await this.fetchAll();
+    }
+    return res;
   },
   async deleteClosing(id: string) {
     const res = await runGas('deleteClosing', id);
     if (res && res.success) {
-      this._closings = this._closings.filter(c => c.id !== id);
+      const closingToDelete = this._closings.find(c => c.id === id);
+      if (closingToDelete) {
+        // 1. Revertir stock de productos localmente
+        // El backend devuelve los productos vendidos en el cierre para revertir
+        if (res.revertProducts) {
+          this._products = this._products.map(p => {
+            const soldItem = res.revertProducts.find((item: any) => String(item.productId) === String(p.id));
+            if (soldItem) {
+              const qty = Number(soldItem.quantity) || 0;
+              const sale = Number(soldItem.totalSale) || 0;
+              return {
+                ...p,
+                stock: (Number(p.stock) || 0) + qty,
+                totalOutputs: (Number(p.totalOutputs) || 0) - qty,
+                totalEarned: (Number(p.totalEarned) || 0) - sale
+              };
+            }
+            return p;
+          });
+        }
+
+        // 2. Revertir deudas localmente
+        if (res.revertNotes) {
+          this._purchaseNotes = this._purchaseNotes.map(n => {
+            if (res.revertNotes.includes(n.id)) {
+              return { ...n, status: 'Pending', paymentSource: 'Capital' };
+            }
+            return n;
+          });
+        }
+
+        // 3. Revertir sobres localmente
+        const profit = Number(closingToDelete.netProfit) || 0;
+        const cogs = Number(closingToDelete.cogs) || 0;
+        this._envelopes = this._envelopes.map(e => {
+          if (e.id === 'ENV4') return { ...e, balance: (Number(e.balance) || 0) - cogs };
+          if (profit > 0 && ['ENV1', 'ENV2', 'ENV3'].includes(e.id)) {
+            return { ...e, balance: (Number(e.balance) || 0) - (profit / 3) };
+          }
+          return e;
+        });
+
+        // 4. Eliminar registros de outputs asociados
+        this._outputs = this._outputs.filter(o => o.notes !== `Cierre Maestro: ${id}`);
+        
+        // 4. Eliminar el cierre
+        this._closings = this._closings.filter(c => c.id !== id);
+        
+        this._notify();
+      }
+    }
+    return res;
+  },
+  async saveMasterClosing(data: {
+    closing: DailyClosing,
+    products: any[],
+    debtsToPay: { id: string, method: 'Sales' | 'Capital' }[]
+  }) {
+    const res = await runGas('saveMasterClosing', data);
+    if (res && res.success) {
+      // 1. Actualizar stock de productos localmente
+      this._products = this._products.map(p => {
+        const soldItem = data.products.find(item => String(item.productId) === String(p.id));
+        if (soldItem) {
+          const qty = Number(soldItem.quantity) || 0;
+          const sale = Number(soldItem.totalSale) || 0;
+          return {
+            ...p,
+            stock: (Number(p.stock) || 0) - qty,
+            totalOutputs: (Number(p.totalOutputs) || 0) + qty,
+            totalEarned: (Number(p.totalEarned) || 0) + sale
+          };
+        }
+        return p;
+      });
+
+      // 2. Actualizar deudas localmente
+      this._purchaseNotes = this._purchaseNotes.map(n => {
+        const debt = data.debtsToPay.find(d => d.id === n.id);
+        if (debt) {
+          // Si se paga con capital, descontar del sobre 4
+          if (debt.method === 'Capital') {
+            this._envelopes = this._envelopes.map(e => 
+              e.id === 'ENV4' ? { ...e, balance: (Number(e.balance) || 0) - (Number(n.totalAmount) || 0) } : e
+            );
+          }
+          return { ...n, status: 'Paid', paymentSource: debt.method };
+        }
+        return n;
+      });
+
+      // 3. Crear registro de output localmente
+      const masterOutput: OutputTransaction = {
+        id: "OUT-" + Math.random().toString(36).substr(2, 9),
+        productId: "MASTER",
+        productName: "Cierre Maestro",
+        quantity: 0,
+        salePrice: 0,
+        totalSale: data.closing.totalSold,
+        date: data.closing.date,
+        shift: "General",
+        notes: `Cierre Maestro: ${data.closing.id}`,
+        type: 'exit'
+      };
+      this._outputs = [masterOutput, ...this._outputs];
+
+      // 4. Guardar el cierre localmente
+      this._closings = [data.closing, ...this._closings];
+
+      // 5. Distribuir utilidad y COGS en sobres localmente
+      const profit = Number(data.closing.netProfit) || 0;
+      const cogs = Number(data.closing.cogs) || 0;
+      
+      this._envelopes = this._envelopes.map(e => {
+        if (e.id === 'ENV4') return { ...e, balance: (Number(e.balance) || 0) + cogs };
+        if (profit > 0 && ['ENV1', 'ENV2', 'ENV3'].includes(e.id)) {
+          return { ...e, balance: (Number(e.balance) || 0) + (profit / 3) };
+        }
+        return e;
+      });
+
+      // 6. Limpiar el borrador de inventario
+      this._draftPhysicalCount = [];
+
       this._notify();
     }
     return res;
@@ -614,6 +747,50 @@ export const dataService = {
     }
     return res;
   },
-  async processPhysicalCount(counts: any[], shift: string) { const res = await runGas('processPhysicalCount', { counts, shift }); await this.fetchAll(); return res; },
+  processPhysicalCount(counts: Record<string, number>, shift: string) {
+    const products = this.getProducts();
+    const draft: OutputTransaction[] = [];
+    let totalSold = 0;
+    let totalCOGS = 0;
+
+    Object.entries(counts).forEach(([id, val]) => {
+      const product = products.find(p => String(p.id) === String(id));
+      if (product) {
+        const systemStock = Number(product.stock) || 0;
+        const physicalCount = Number(val) || 0;
+        const difference = systemStock - physicalCount;
+        
+        if (difference > 0) {
+          const itemSale = difference * product.salePrice;
+          const itemCost = difference * product.costPrice;
+          totalSold += itemSale;
+          totalCOGS += itemCost;
+
+          draft.push({
+            id: "DFT-" + Math.random().toString(36).substr(2, 9),
+            productId: product.id,
+            productName: product.name,
+            quantity: difference,
+            salePrice: product.salePrice,
+            totalSale: itemSale,
+            date: new Date().toISOString(),
+            shift: shift,
+            notes: "Diferencia Inventario Físico",
+            type: 'exit'
+          });
+        }
+      }
+    });
+
+    this._draftPhysicalCount = draft;
+    this._notify();
+    return { 
+      success: true, 
+      draft,
+      totalSold,
+      totalCOGS,
+      netProfit: totalSold - totalCOGS
+    };
+  },
   async sync() { await this.fetchAll(); return { success: true }; }
 };

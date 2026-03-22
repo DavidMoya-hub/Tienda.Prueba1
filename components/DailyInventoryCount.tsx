@@ -112,8 +112,7 @@ const DailyInventoryCount: React.FC = () => {
     
     setIsProcessing(true);
     try {
-      const payload = Object.entries(counts).map(([id, val]) => ({ productId: id, physicalCount: val }));
-      const res = await dataService.processPhysicalCount(payload, 'Daily Count');
+      const res = await dataService.processPhysicalCount(counts, 'Daily Count');
       setSummary(res);
       if (pendingNotes.length > 0) setShowDebtModal(true);
     } catch (e: any) {
