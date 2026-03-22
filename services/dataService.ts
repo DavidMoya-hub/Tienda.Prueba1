@@ -160,6 +160,7 @@ export const dataService = {
     if (res && res.success) {
       const inputToDelete = this._inputs.find(i => i.id === id);
       if (inputToDelete) {
+        // 1. Restar del stock en Products
         this._products = this._products.map(p => {
           if (String(p.id) === String(inputToDelete.productId)) {
             return {
@@ -171,7 +172,43 @@ export const dataService = {
           }
           return p;
         });
+
+        // 2. Actualizar la nota padre si existe
+        const noteRef = inputToDelete.notes || "";
+        if (noteRef.startsWith("Compra: ")) {
+          const noteId = noteRef.replace("Compra: ", "").trim();
+          this._purchaseNotes = this._purchaseNotes.map(note => {
+            if (note.id === noteId) {
+              const currentTotal = Number(note.totalAmount) || 0;
+              const newTotal = Math.max(0, currentTotal - (Number(inputToDelete.totalCost) || 0));
+              
+              let details = [];
+              try {
+                details = JSON.parse(note.detailsJson || "[]");
+              } catch(e) {}
+              
+              const newDetails = details.filter((item: any) => String(item.productId) !== String(inputToDelete.productId));
+              
+              // Si la nota estaba pagada, devolver el dinero al sobre 4 (Capital) localmente
+              if (note.status === 'Paid') {
+                this._envelopes = this._envelopes.map(env => 
+                  env.id === 'ENV4' ? { ...env, balance: (Number(env.balance) || 0) + (Number(inputToDelete.totalCost) || 0) } : env
+                );
+              }
+
+              return {
+                ...note,
+                totalAmount: newTotal,
+                detailsJson: JSON.stringify(newDetails)
+              };
+            }
+            return note;
+          });
+        }
+
+        // 3. Eliminar de Inputs
         this._inputs = this._inputs.filter(i => i.id !== id);
+        
         this._notify();
       }
     }
@@ -285,10 +322,10 @@ export const dataService = {
       });
 
       // --- PASO C: LIMPIAR ENTRADAS EN ESTADO LOCAL ---
-      const noteMatch = "Compra: " + id;
-      this._inputs = this._inputs.filter(i => i.notes !== noteMatch);
+      this._inputs = this._inputs.filter(i => !i.notes.includes(id));
 
       // --- PASO D: REAPLICAR NUEVO EN ESTADO LOCAL ---
+      const noteMatch = "Compra: " + id;
       const newInputs: InputTransaction[] = newDetails.map((item: any) => ({
         id: "INP-" + Math.random().toString(36).substr(2, 9),
         productId: item.productId,

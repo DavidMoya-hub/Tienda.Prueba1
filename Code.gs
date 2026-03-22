@@ -452,7 +452,7 @@ function updatePurchaseNoteDetails(data) {
   const noteMatch = "Compra: " + noteId;
   // Recorrer de abajo hacia arriba para borrar
   for (let i = inputData.length - 1; i >= 1; i--) {
-    if (inputData[i][8] === noteMatch) {
+    if (String(inputData[i][8]).trim() === noteMatch) {
       inputSheet.deleteRow(i + 1);
     }
   }
@@ -631,15 +631,57 @@ function deleteInput(id) {
       const productId = data[i][1];
       const quantity = parseAmount(data[i][3]);
       const totalCost = parseAmount(data[i][5]);
+      const noteRef = data[i][8] || ""; // Columna 'notes'
       
-      // RESTAR del inventario maestro (isInput=false para revertir una entrada)
+      // 1. Restar del inventario maestro
       updateProductStock(productId, quantity, totalCost, false);
+      
+      // 2. Si pertenece a una nota de compra, actualizar la nota padre
+      if (noteRef.startsWith("Compra: ")) {
+        const noteId = noteRef.replace("Compra: ", "").trim();
+        updateParentNoteAfterInputDelete(noteId, productId, totalCost);
+      }
       
       sheet.deleteRow(i + 1);
       return {success: true};
     }
   }
   return {success: false, error: "No encontrado"};
+}
+
+/**
+ * Actualiza el total y el JSON de detalles de una nota de compra tras borrar un input individual.
+ */
+function updateParentNoteAfterInputDelete(noteId, productId, inputTotalCost) {
+  const sheet = getSheet("PurchaseNotes");
+  const data = sheet.getDataRange().getValues();
+  const searchId = noteId.toString().trim().toUpperCase();
+  
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0].toString().trim().toUpperCase() === searchId) {
+      const currentTotal = parseAmount(data[i][3]);
+      const newTotal = Math.max(0, currentTotal - inputTotalCost);
+      
+      let details = [];
+      try {
+        details = JSON.parse(data[i][5] || "[]");
+      } catch(e) {}
+      
+      // Filtrar el producto borrado del JSON de detalles
+      const newDetails = details.filter(item => String(item.productId) !== String(productId));
+      
+      sheet.getRange(i + 1, 4).setValue(newTotal); // totalAmount
+      sheet.getRange(i + 1, 6).setValue(JSON.stringify(newDetails)); // detailsJson
+      
+      // Si la nota estaba pagada, devolver el dinero al sobre 4 (Capital)
+      const status = data[i][4];
+      if (status === 'Paid') {
+        updateEnvelopeBalance("ENV4", inputTotalCost);
+      }
+      
+      break;
+    }
+  }
 }
 
 function deleteOutput(id) { 
