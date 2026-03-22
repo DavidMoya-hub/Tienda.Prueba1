@@ -507,6 +507,49 @@ export const dataService = {
     }
     return res;
   },
+  async deleteItemFromNote(noteId: string, productId: string) {
+    const res = await runGas('deleteItemFromPurchaseNote', { noteId, productId });
+    if (res && res.success) {
+      const note = this._purchaseNotes.find(n => n.id === noteId);
+      if (!note) return res;
+
+      const details = JSON.parse(note.detailsJson || '[]');
+      const itemToDelete = details.find((d: any) => String(d.productId) === String(productId));
+      if (!itemToDelete) return res;
+
+      const qtyToDelete = Number(itemToDelete.quantity) || 0;
+      const costToDelete = Number(itemToDelete.totalCost) || 0;
+
+      // 1. Filtrar el ítem borrado de this._inputs
+      const noteMatch = "Compra: " + noteId;
+      this._inputs = this._inputs.filter(i => !(i.notes === noteMatch && String(i.productId) === String(productId)));
+
+      // 2. Restar la cantidad al stock en this._products
+      this._products = this._products.map(p => {
+        if (String(p.id) === String(productId)) {
+          return {
+            ...p,
+            stock: (Number(p.stock) || 0) - qtyToDelete,
+            totalInputs: (Number(p.totalInputs) || 0) - qtyToDelete,
+            totalInvested: (Number(p.totalInvested) || 0) - costToDelete
+          };
+        }
+        return p;
+      });
+
+      // 3. Actualizar o eliminar la nota
+      if (res.destroyed) {
+        this._purchaseNotes = this._purchaseNotes.filter(n => n.id !== noteId);
+      } else {
+        this._purchaseNotes = this._purchaseNotes.map(n => 
+          n.id === noteId ? { ...n, totalAmount: res.newTotalAmount, detailsJson: res.newDetailsJson } : n
+        );
+      }
+
+      this._notify();
+    }
+    return res;
+  },
   async processPhysicalCount(counts: any[], shift: string) { const res = await runGas('processPhysicalCount', { counts, shift }); await this.fetchAll(); return res; },
   async sync() { await this.fetchAll(); return { success: true }; }
 };

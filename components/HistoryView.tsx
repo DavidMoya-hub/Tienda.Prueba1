@@ -157,6 +157,41 @@ const HistoryView: React.FC = () => {
       }
     }
   };
+  
+  const handleDeleteItem = async (noteId: string, productId: string) => {
+    if (!confirm("¿Estás seguro de eliminar este producto de la nota? El stock se revertirá.")) return;
+    try {
+      const res = await dataService.deleteItemFromNote(noteId, productId);
+      if (res && res.success) {
+        setModal({
+          isOpen: true,
+          title: 'Éxito',
+          message: 'Producto eliminado de la nota correctamente.',
+          type: 'success'
+        });
+        
+        if (res.destroyed) {
+          setSelectedNote(null);
+        } else {
+          // Actualizar la nota seleccionada con los nuevos datos
+          const updatedNote = dataService.getPurchaseNotes().find(n => n.id === noteId);
+          if (updatedNote) {
+            setSelectedNote(updatedNote);
+            setEditedDetails(parseDetails(updatedNote.detailsJson));
+          }
+        }
+      } else {
+        throw new Error(res?.error || 'Error desconocido');
+      }
+    } catch (error) {
+      setModal({
+        isOpen: true,
+        title: 'Error',
+        message: 'Error al eliminar producto: ' + error,
+        type: 'error'
+      });
+    }
+  };
 
   const handleDelete = async (id: string, type: 'Input' | 'Output' | 'Closing' | 'Debt' | 'Audit') => {
     if (!confirm("¿Estás seguro de eliminar este registro? Esta acción no se puede deshacer.")) return;
@@ -810,6 +845,7 @@ const HistoryView: React.FC = () => {
                         <th className="px-4 py-3 text-center">Cant</th>
                         <th className="px-4 py-3 text-right">Costo U.</th>
                         <th className="px-4 py-3 text-right">Subtotal</th>
+                        <th className="px-4 py-3 text-right">Acción</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
@@ -841,6 +877,15 @@ const HistoryView: React.FC = () => {
                             )}
                           </td>
                           <td className="px-4 py-3 text-right font-black text-slate-900">${Number(item.totalCost || 0).toFixed(2)}</td>
+                          <td className="px-4 py-3 text-right">
+                            <button 
+                              onClick={() => handleDeleteItem(selectedNote.id, item.productId)}
+                              className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Eliminar de la nota"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </td>
                         </tr>
                       ))}
                       {(isEditingDetails ? editedDetails : parseDetails(selectedNote.detailsJson || '')).length === 0 && (

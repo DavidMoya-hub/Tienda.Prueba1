@@ -933,6 +933,68 @@ function savePriceHistory(h) {
   return upsertToSheet("PriceHistory", headers, h, "id");
 }
 
+function deleteItemFromPurchaseNote(data) {
+  const { noteId, productId } = data;
+  const sheet = getSheet("PurchaseNotes");
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0];
+  const idIdx = 0;
+  const totalIdx = headers.indexOf("totalAmount");
+  const detailsIdx = headers.indexOf("detailsJson");
+
+  const searchId = noteId.toString().trim().toUpperCase();
+  let foundRow = -1;
+  let detailsJson = "";
+  let totalAmount = 0;
+
+  for (let i = 1; i < values.length; i++) {
+    if (values[i][idIdx].toString().trim().toUpperCase() === searchId) {
+      foundRow = i + 1;
+      detailsJson = values[i][detailsIdx];
+      totalAmount = parseAmount(values[i][totalIdx]);
+      break;
+    }
+  }
+
+  if (foundRow === -1) return { error: "Nota no encontrada" };
+
+  const details = JSON.parse(detailsJson || '[]');
+  const itemIndex = details.findIndex(d => String(d.productId) === String(productId));
+  
+  if (itemIndex === -1) return { error: "Producto no encontrado en la nota" };
+
+  const itemToDelete = details[itemIndex];
+  const qtyToDelete = parseAmount(itemToDelete.quantity);
+  const costToDelete = parseAmount(itemToDelete.totalCost);
+
+  // Paso 3: Revertir stock
+  updateProductStock(productId, qtyToDelete, costToDelete, false);
+
+  // Paso 4: Eliminar de Inputs
+  const inputSheet = getSheet("Inputs");
+  const inputData = inputSheet.getDataRange().getValues();
+  const noteMatch = "Compra: " + noteId;
+  for (let i = inputData.length - 1; i >= 1; i--) {
+    if (String(inputData[i][8]).trim() === noteMatch && String(inputData[i][1]) === String(productId)) {
+      inputSheet.deleteRow(i + 1);
+    }
+  }
+
+  // Paso 5 & 6: Actualizar nota
+  const newTotalAmount = totalAmount - costToDelete;
+  const newDetails = details.filter((_, idx) => idx !== itemIndex);
+
+  // Paso 7: Condición de Destrucción
+  if (newDetails.length === 0 || newTotalAmount <= 0) {
+    sheet.deleteRow(foundRow);
+    return { success: true, destroyed: true };
+  } else {
+    sheet.getRange(foundRow, totalIdx + 1).setValue(newTotalAmount);
+    sheet.getRange(foundRow, detailsIdx + 1).setValue(JSON.stringify(newDetails));
+    return { success: true, destroyed: false, newTotalAmount, newDetailsJson: JSON.stringify(newDetails) };
+  }
+}
+
 function setupSheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheets = {
