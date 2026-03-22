@@ -64,6 +64,7 @@ function doPost(e) {
       case 'saveClosing': result = saveClosing(data); break;
       case 'savePriceHistory': result = savePriceHistory(data); break;
       case 'updateNoteStatus': result = updateNoteStatus(data.id, data.status); break;
+      case 'updatePurchaseNoteDetails': result = updatePurchaseNoteDetails(data); break;
       case 'processPhysicalCount': result = processPhysicalCount(data.counts, data.shift); break;
       
       // --- BORRADO ---
@@ -404,6 +405,98 @@ function updateNoteStatus(id, status) {
   return {error: "No encontrada"};
 }
 
+function updatePurchaseNoteDetails(data) {
+  const { id, totalAmount, detailsJson } = data;
+  const noteId = id;
+  const sheet = getSheet("PurchaseNotes");
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0];
+  const idIdx = 0;
+  const totalIdx = headers.indexOf("totalAmount");
+  const detailsIdx = headers.indexOf("detailsJson");
+  const statusIdx = headers.indexOf("status");
+  const dateIdx = headers.indexOf("date");
+  const providerIdx = headers.indexOf("provider");
+
+  const searchId = id.toString().trim().toUpperCase();
+  let foundRow = -1;
+  let oldDetailsJson = "";
+  let oldTotalAmount = 0;
+  let status = "";
+  let noteDate = "";
+  let noteProvider = "";
+
+  for (let i = 1; i < values.length; i++) {
+    if (values[i][idIdx].toString().trim().toUpperCase() === searchId) {
+      foundRow = i + 1;
+      oldDetailsJson = values[i][detailsIdx];
+      oldTotalAmount = parseAmount(values[i][totalIdx]);
+      status = values[i][statusIdx];
+      noteDate = values[i][dateIdx];
+      noteProvider = values[i][providerIdx];
+      break;
+    }
+  }
+
+  if (foundRow === -1) return { error: "Nota no encontrada" };
+
+  // --- PASO B: REVERTIR STOCK ANTIGUO ---
+  const oldDetails = JSON.parse(oldDetailsJson || '[]');
+  oldDetails.forEach(item => {
+    updateProductStock(item.productId, parseAmount(item.quantity), parseAmount(item.totalCost), false);
+  });
+
+  // --- PASO C: LIMPIAR ENTRADAS EN 'INPUTS' ---
+  const inputSheet = getSheet("Inputs");
+  const inputData = inputSheet.getDataRange().getValues();
+  const noteMatch = "Compra: " + noteId;
+  // Recorrer de abajo hacia arriba para borrar
+  for (let i = inputData.length - 1; i >= 1; i--) {
+    if (inputData[i][8] === noteMatch) {
+      inputSheet.deleteRow(i + 1);
+    }
+  }
+
+  // --- PASO D: REAPLICAR NUEVO ---
+  const newDetails = JSON.parse(detailsJson || '[]');
+  const inputHeaders = ["id", "productId", "productName", "quantity", "unitCost", "totalCost", "date", "provider", "notes", "type"];
+  
+  newDetails.forEach(item => {
+    // SUMAR al inventario
+    updateProductStock(item.productId, parseAmount(item.quantity), parseAmount(item.totalCost), true);
+    
+    // Escribir nueva fila en Inputs
+    const inputRow = inputHeaders.map(h => {
+      if (h === 'id') return "INP-" + Utilities.getUuid();
+      if (h === 'productId') return item.productId;
+      if (h === 'productName') return item.productName;
+      if (h === 'quantity') return parseAmount(item.quantity);
+      if (h === 'unitCost') return parseAmount(item.unitCost);
+      if (h === 'totalCost') return parseAmount(item.totalCost);
+      if (h === 'date') return noteDate;
+      if (h === 'provider') return noteProvider;
+      if (h === 'notes') return noteMatch;
+      if (h === 'type') return "entry";
+      return "";
+    });
+    inputSheet.appendRow(inputRow);
+  });
+
+  // Si la nota estaba pagada, ajustar el sobre 4 por la diferencia de total
+  if (status === 'Paid') {
+    const diffTotal = parseAmount(totalAmount) - oldTotalAmount;
+    if (diffTotal !== 0) {
+      updateEnvelopeBalance("ENV4", -diffTotal);
+    }
+  }
+
+  // --- PASO E: ACTUALIZAR NOTA ---
+  sheet.getRange(foundRow, totalIdx + 1).setValue(parseAmount(totalAmount));
+  sheet.getRange(foundRow, detailsIdx + 1).setValue(detailsJson);
+
+  return { success: true };
+}
+
 function saveProduct(p) {
   const headers = ["id", "code", "name", "grams", "flavor", "costPrice", "salePrice", "stock", "category", "provider", "totalInvested", "totalEarned", "totalInputs", "totalOutputs"];
   const cleanP = {...p};
@@ -539,8 +632,8 @@ function deleteInput(id) {
       const quantity = parseAmount(data[i][3]);
       const totalCost = parseAmount(data[i][5]);
       
-      // Revertir stock y totalInvested
-      updateProductStock(productId, -quantity, -totalCost, true);
+      // RESTAR del inventario maestro (isInput=false para revertir una entrada)
+      updateProductStock(productId, quantity, totalCost, false);
       
       sheet.deleteRow(i + 1);
       return {success: true};

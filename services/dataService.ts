@@ -1,6 +1,6 @@
 import { Product, InputTransaction, OutputTransaction, DailyClosing, PriceHistory, PurchaseNote, Envelope, EnvelopeWithdrawal } from "../types";
 
-const API_URL = "https://script.google.com/macros/s/AKfycbwuIun4eajmCiwJOV_LkaToNPhSwUVLfV4PgcJX2Khb3zX8N5shdTP2u5FLvpv2wJJdqA/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbw7Upw_hJqkTqcDMMlzwpRFLDtU_JPg5IF6ddwJhezNVVUpbcu6osiSB_4MneTvgTX0kg/exec";
 
 declare var google: any;
 
@@ -155,7 +155,28 @@ export const dataService = {
   },
   async deleteProduct(id: string) { await runGas('deleteProduct', id); await this.fetchAll(); },
   async saveInput(i: InputTransaction) { await runGas('saveInput', i); await this.fetchAll(); },
-  async deleteInput(id: string) { await runGas('deleteInput', id); await this.fetchAll(); },
+  async deleteInput(id: string) {
+    const res = await runGas('deleteInput', id);
+    if (res && res.success) {
+      const inputToDelete = this._inputs.find(i => i.id === id);
+      if (inputToDelete) {
+        this._products = this._products.map(p => {
+          if (String(p.id) === String(inputToDelete.productId)) {
+            return {
+              ...p,
+              stock: (Number(p.stock) || 0) - (Number(inputToDelete.quantity) || 0),
+              totalInputs: (Number(p.totalInputs) || 0) - (Number(inputToDelete.quantity) || 0),
+              totalInvested: (Number(p.totalInvested) || 0) - (Number(inputToDelete.totalCost) || 0)
+            };
+          }
+          return p;
+        });
+        this._inputs = this._inputs.filter(i => i.id !== id);
+        this._notify();
+      }
+    }
+    return res;
+  },
   async saveOutput(o: OutputTransaction) { await runGas('saveOutput', o); await this.fetchAll(); },
   async deleteOutput(id: string) { await runGas('deleteOutput', id); await this.fetchAll(); },
   async saveClosing(c: DailyClosing) {
@@ -179,6 +200,21 @@ export const dataService = {
       this._purchaseNotes = [note, ...this._purchaseNotes];
       const details = JSON.parse(note.detailsJson || '[]');
       
+      // Crear entradas individuales en el estado local
+      const newInputs: InputTransaction[] = details.map((item: any) => ({
+        id: "INP-" + Math.random().toString(36).substr(2, 9),
+        productId: item.productId,
+        productName: item.productName,
+        quantity: Number(item.quantity),
+        unitCost: Number(item.unitCost),
+        totalCost: Number(item.totalCost),
+        date: note.date,
+        provider: note.provider,
+        notes: "Compra: " + note.id,
+        type: 'entry'
+      }));
+      this._inputs = [...newInputs, ...this._inputs];
+
       this._products = this._products.map(p => {
         const item = details.find((d: any) => String(d.productId) === String(p.id) || d.code === p.code);
         if (item) {
@@ -225,6 +261,80 @@ export const dataService = {
     return res;
   },
   async updateNoteStatus(id: string, status: string) { await runGas('updateNoteStatus', { id, status }); await this.fetchAll(); },
+  async updatePurchaseNoteDetails(id: string, totalAmount: number, detailsJson: string) {
+    const res = await runGas('updatePurchaseNoteDetails', { id, totalAmount, detailsJson });
+    if (res && res.success) {
+      const oldNote = this._purchaseNotes.find(n => n.id === id);
+      if (!oldNote) return res;
+
+      const oldDetails = JSON.parse(oldNote.detailsJson || '[]');
+      const newDetails = JSON.parse(detailsJson || '[]');
+
+      // --- PASO B: REVERTIR STOCK ANTIGUO EN ESTADO LOCAL ---
+      this._products = this._products.map(p => {
+        const oldItem = oldDetails.find((d: any) => String(d.productId) === String(p.id));
+        if (oldItem) {
+          return {
+            ...p,
+            stock: (Number(p.stock) || 0) - (Number(oldItem.quantity) || 0),
+            totalInputs: (Number(p.totalInputs) || 0) - (Number(oldItem.quantity) || 0),
+            totalInvested: (Number(p.totalInvested) || 0) - (Number(oldItem.totalCost) || 0)
+          };
+        }
+        return p;
+      });
+
+      // --- PASO C: LIMPIAR ENTRADAS EN ESTADO LOCAL ---
+      const noteMatch = "Compra: " + id;
+      this._inputs = this._inputs.filter(i => i.notes !== noteMatch);
+
+      // --- PASO D: REAPLICAR NUEVO EN ESTADO LOCAL ---
+      const newInputs: InputTransaction[] = newDetails.map((item: any) => ({
+        id: "INP-" + Math.random().toString(36).substr(2, 9),
+        productId: item.productId,
+        productName: item.productName,
+        quantity: Number(item.quantity),
+        unitCost: Number(item.unitCost),
+        totalCost: Number(item.totalCost),
+        date: oldNote.date,
+        provider: oldNote.provider,
+        notes: noteMatch,
+        type: 'entry'
+      }));
+      this._inputs = [...newInputs, ...this._inputs];
+
+      this._products = this._products.map(p => {
+        const newItem = newDetails.find((d: any) => String(d.productId) === String(p.id));
+        if (newItem) {
+          return {
+            ...p,
+            stock: (Number(p.stock) || 0) + (Number(newItem.quantity) || 0),
+            totalInputs: (Number(p.totalInputs) || 0) + (Number(newItem.quantity) || 0),
+            totalInvested: (Number(p.totalInvested) || 0) + (Number(newItem.totalCost) || 0)
+          };
+        }
+        return p;
+      });
+
+      // Actualizar sobres si estaba pagada
+      if (oldNote.status === 'Paid') {
+        const diffTotal = totalAmount - (Number(oldNote.totalAmount) || 0);
+        if (diffTotal !== 0) {
+          this._envelopes = this._envelopes.map(e => 
+            e.id === 'ENV4' ? { ...e, balance: (Number(e.balance) || 0) - diffTotal } : e
+          );
+        }
+      }
+
+      // --- PASO E: ACTUALIZAR NOTA EN ESTADO LOCAL ---
+      this._purchaseNotes = this._purchaseNotes.map(n => 
+        n.id === id ? { ...n, totalAmount, detailsJson } : n
+      );
+
+      this._notify();
+    }
+    return res;
+  },
   async processPhysicalCount(counts: any[], shift: string) { const res = await runGas('processPhysicalCount', { counts, shift }); await this.fetchAll(); return res; },
   async sync() { await this.fetchAll(); return { success: true }; }
 };

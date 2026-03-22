@@ -12,6 +12,8 @@ const HistoryView: React.FC = () => {
   const [endDate, setEndDate] = useState('');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [selectedNote, setSelectedNote] = useState<PurchaseNote | null>(null);
+  const [isEditingDetails, setIsEditingDetails] = useState(false);
+  const [editedDetails, setEditedDetails] = useState<any[]>([]);
   
   const inputs = dataService.getInputs();
   const outputs = dataService.getOutputs();
@@ -61,6 +63,39 @@ const HistoryView: React.FC = () => {
     } catch (e) {
       console.error("Error parsing detailsJson:", e);
       return [];
+    }
+  };
+
+  const handleOpenDetails = (note: PurchaseNote) => {
+    setSelectedNote(note);
+    setEditedDetails(parseDetails(note.detailsJson));
+    setIsEditingDetails(false);
+  };
+
+  const handleQuantityChange = (index: number, newQty: number) => {
+    const updated = [...editedDetails];
+    const item = updated[index];
+    item.quantity = newQty;
+    item.totalCost = newQty * (Number(item.unitCost) || 0);
+    setEditedDetails(updated);
+  };
+
+  const editedTotalAmount = useMemo(() => {
+    return editedDetails.reduce((acc, item) => acc + (Number(item.totalCost) || 0), 0);
+  }, [editedDetails]);
+
+  const handleSaveDetails = async () => {
+    if (!selectedNote) return;
+    try {
+      await dataService.updatePurchaseNoteDetails(
+        selectedNote.id,
+        editedTotalAmount,
+        JSON.stringify(editedDetails)
+      );
+      setSelectedNote(null);
+      setIsEditingDetails(false);
+    } catch (error) {
+      alert("Error al guardar cambios: " + error);
     }
   };
 
@@ -366,7 +401,7 @@ const HistoryView: React.FC = () => {
                 {sortedDebts.map(note => (
                   <tr 
                     key={note.id} 
-                    onClick={() => setSelectedNote(note)}
+                    onClick={() => handleOpenDetails(note)}
                     className={`hover:bg-slate-50 transition-colors group cursor-pointer ${note.status === 'Pending' ? 'bg-amber-50/20' : ''}`}
                   >
                     <td className="px-4 md:px-8 py-3 md:py-5 text-slate-400 font-bold">{new Date(note.date).toLocaleDateString()}</td>
@@ -397,7 +432,7 @@ const HistoryView: React.FC = () => {
                         )}
                         <div className="flex items-center space-x-2">
                           <button 
-                            onClick={(e) => { e.stopPropagation(); setSelectedNote(note); }}
+                            onClick={(e) => { e.stopPropagation(); handleOpenDetails(note); }}
                             className="p-2 text-amber-600 hover:bg-amber-100 rounded-xl transition-colors bg-amber-50"
                             title="Ver Detalle"
                           >
@@ -639,12 +674,21 @@ const HistoryView: React.FC = () => {
           <div className="bg-white rounded-[2.5rem] w-full max-w-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
             <div className="bg-amber-600 p-6 md:p-8 text-white flex justify-between items-center">
               <div>
-                <h3 className="text-xl md:text-2xl font-black tracking-tight">Detalle de Compra</h3>
+                <h3 className="text-xl md:text-2xl font-black tracking-tight">{isEditingDetails ? 'Editando Compra' : 'Detalle de Compra'}</h3>
                 <p className="text-amber-200 text-xs font-bold uppercase tracking-widest">{selectedNote.provider}</p>
               </div>
-              <button onClick={() => setSelectedNote(null)} className="text-amber-200 hover:text-white transition-colors">
-                <X size={24} />
-              </button>
+              <div className="flex items-center space-x-4">
+                <button 
+                  onClick={() => setIsEditingDetails(!isEditingDetails)}
+                  className="bg-white/20 hover:bg-white/30 p-2 rounded-xl transition-all"
+                  title={isEditingDetails ? "Cancelar Edición" : "Editar Cantidades"}
+                >
+                  {isEditingDetails ? <X size={20} /> : <Edit size={20} />}
+                </button>
+                <button onClick={() => setSelectedNote(null)} className="text-amber-200 hover:text-white transition-colors">
+                  <X size={24} />
+                </button>
+              </div>
             </div>
             
             <div className="p-6 md:p-8 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
@@ -661,9 +705,11 @@ const HistoryView: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Nota</label>
-                  <p className="font-black text-slate-800 text-xl tracking-tighter">${Number(selectedNote.totalAmount).toLocaleString()}</p>
+                  <p className={`font-black text-xl tracking-tighter ${isEditingDetails ? 'text-blue-600' : 'text-slate-800'}`}>
+                    ${(isEditingDetails ? editedTotalAmount : Number(selectedNote.totalAmount)).toLocaleString()}
+                  </p>
                 </div>
-                {selectedNote.status === 'Pending' && (
+                {selectedNote.status === 'Pending' && !isEditingDetails && (
                   <div className="flex items-end">
                     <button 
                       onClick={(e) => {
@@ -695,17 +741,26 @@ const HistoryView: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
-                      {parseDetails(selectedNote.detailsJson || '').map((item: any, idx: number) => (
+                      {(isEditingDetails ? editedDetails : parseDetails(selectedNote.detailsJson || '')).map((item: any, idx: number) => (
                         <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
                           <td className="px-4 py-3 font-bold text-slate-800">{item.productName}</td>
                           <td className="px-4 py-3 text-center font-black text-blue-600">
-                            <span className="bg-blue-50 px-2 py-0.5 rounded-md">{item.quantity}</span>
+                            {isEditingDetails ? (
+                              <input 
+                                type="number"
+                                value={item.quantity}
+                                onChange={(e) => handleQuantityChange(idx, Number(e.target.value))}
+                                className="w-16 bg-white border-2 border-blue-100 rounded-lg px-2 py-1 text-center outline-none focus:border-blue-500 transition-all"
+                              />
+                            ) : (
+                              <span className="bg-blue-50 px-2 py-0.5 rounded-md">{item.quantity}</span>
+                            )}
                           </td>
                           <td className="px-4 py-3 text-right text-slate-500">${Number(item.unitCost || 0).toFixed(2)}</td>
                           <td className="px-4 py-3 text-right font-black text-slate-900">${Number(item.totalCost || 0).toFixed(2)}</td>
                         </tr>
                       ))}
-                      {parseDetails(selectedNote.detailsJson || '').length === 0 && (
+                      {(isEditingDetails ? editedDetails : parseDetails(selectedNote.detailsJson || '')).length === 0 && (
                         <tr>
                           <td colSpan={4} className="px-4 py-8 text-center text-slate-400 font-bold italic">
                             No se encontraron detalles para esta nota.
@@ -718,13 +773,31 @@ const HistoryView: React.FC = () => {
               </div>
             </div>
             
-            <div className="p-6 bg-slate-50 border-t border-slate-100">
-              <button 
-                onClick={() => setSelectedNote(null)}
-                className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black hover:bg-slate-800 transition-all shadow-xl shadow-slate-200 uppercase tracking-widest text-xs"
-              >
-                Cerrar Detalle
-              </button>
+            <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-4">
+              {isEditingDetails ? (
+                <>
+                  <button 
+                    onClick={() => setIsEditingDetails(false)}
+                    className="flex-1 bg-slate-200 text-slate-600 py-4 rounded-2xl font-black hover:bg-slate-300 transition-all uppercase tracking-widest text-xs"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    onClick={handleSaveDetails}
+                    className="flex-2 bg-blue-600 text-white py-4 rounded-2xl font-black hover:bg-blue-700 transition-all shadow-xl shadow-blue-200 uppercase tracking-widest text-xs flex items-center justify-center gap-2"
+                  >
+                    <Save size={16} />
+                    <span>Guardar Cambios</span>
+                  </button>
+                </>
+              ) : (
+                <button 
+                  onClick={() => setSelectedNote(null)}
+                  className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black hover:bg-slate-800 transition-all shadow-xl shadow-slate-200 uppercase tracking-widest text-xs"
+                >
+                  Cerrar Detalle
+                </button>
+              )}
             </div>
           </div>
         </div>
