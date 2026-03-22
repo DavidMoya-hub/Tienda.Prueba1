@@ -154,34 +154,106 @@ export const dataService = {
     return res;
   },
   async deleteProduct(id: string) { await runGas('deleteProduct', id); await this.fetchAll(); },
-  async saveInput(i: InputTransaction) { await runGas('saveInput', i); await this.fetchAll(); },
+  async saveInput(i: InputTransaction) {
+    const res = await runGas('saveInput', i);
+    if (res && res.success) {
+      const oldInput = this._inputs.find(inp => inp.id === i.id);
+      const oldQty = oldInput ? (Number(oldInput.quantity) || 0) : 0;
+      const oldCost = oldInput ? (Number(oldInput.totalCost) || 0) : 0;
+      
+      const newQty = Number(i.quantity) || 0;
+      const newCost = Number(i.totalCost) || 0;
+      
+      const diffQty = newQty - oldQty;
+      const diffCost = newCost - oldCost;
+
+      // 1. Actualizar Inputs (map)
+      if (oldInput) {
+        this._inputs = this._inputs.map(inp => inp.id === i.id ? { ...inp, ...i } : inp);
+      } else {
+        this._inputs = [i, ...this._inputs];
+      }
+
+      // 2. Actualizar Products (Delta)
+      this._products = this._products.map(p => {
+        if (String(p.id) === String(i.productId)) {
+          return {
+            ...p,
+            stock: (Number(p.stock) || 0) + diffQty,
+            totalInputs: (Number(p.totalInputs) || 0) + diffQty,
+            totalInvested: (Number(p.totalInvested) || 0) + diffCost
+          };
+        }
+        return p;
+      });
+
+      // 3. Actualizar PurchaseNotes (Delta)
+      const noteRef = i.notes || (oldInput?.notes || "");
+      if (noteRef.startsWith("Compra: ")) {
+        const noteId = noteRef.replace("Compra: ", "").trim();
+        this._purchaseNotes = this._purchaseNotes.map(note => {
+          if (note.id === noteId) {
+            const currentTotal = Number(note.totalAmount) || 0;
+            const newTotal = currentTotal + diffCost;
+            
+            let details = [];
+            try {
+              details = JSON.parse(note.detailsJson || "[]");
+            } catch(e) {}
+            
+            const newDetails = details.map((item: any) => {
+              if (String(item.productId) === String(i.productId)) {
+                return { ...item, quantity: newQty, totalCost: newCost };
+              }
+              return item;
+            });
+
+            // Ajustar sobre 4 si estaba pagada
+            if (note.status === 'Paid' && diffCost !== 0) {
+              this._envelopes = this._envelopes.map(env => 
+                env.id === 'ENV4' ? { ...env, balance: (Number(env.balance) || 0) - diffCost } : env
+              );
+            }
+
+            return { ...note, totalAmount: newTotal, detailsJson: JSON.stringify(newDetails) };
+          }
+          return note;
+        });
+      }
+      
+      this._notify();
+    }
+    return res;
+  },
   async deleteInput(id: string) {
     const res = await runGas('deleteInput', id);
     if (res && res.success) {
       const inputToDelete = this._inputs.find(i => i.id === id);
       if (inputToDelete) {
-        // 1. Actualizar this._products restando la cantidad del stock
+        const qty = Number(inputToDelete.quantity) || 0;
+        const cost = Number(inputToDelete.totalCost) || 0;
+
+        // 1. Restar cantidad en Products (Inmutabilidad estricta)
         this._products = this._products.map(p => {
           if (String(p.id) === String(inputToDelete.productId)) {
             return {
               ...p,
-              stock: (Number(p.stock) || 0) - (Number(inputToDelete.quantity) || 0),
-              totalInputs: (Number(p.totalInputs) || 0) - (Number(inputToDelete.quantity) || 0),
-              totalInvested: (Number(p.totalInvested) || 0) - (Number(inputToDelete.totalCost) || 0)
+              stock: (Number(p.stock) || 0) - qty,
+              totalInputs: (Number(p.totalInputs) || 0) - qty,
+              totalInvested: (Number(p.totalInvested) || 0) - cost
             };
           }
           return p;
         });
 
-        // 2. Actualizar this._purchaseNotes: busca la nota padre
+        // 2. Actualizar PurchaseNotes (Borrado condicional)
         const noteRef = inputToDelete.notes || "";
         if (noteRef.startsWith("Compra: ")) {
           const noteId = noteRef.replace("Compra: ", "").trim();
-          
           this._purchaseNotes = this._purchaseNotes.reduce((acc, note) => {
             if (note.id === noteId) {
               const currentTotal = Number(note.totalAmount) || 0;
-              const newTotal = Math.max(0, currentTotal - (Number(inputToDelete.totalCost) || 0));
+              const newTotal = Math.max(0, currentTotal - cost);
               
               let details = [];
               try {
@@ -190,7 +262,7 @@ export const dataService = {
               
               const newDetails = details.filter((item: any) => String(item.productId) !== String(inputToDelete.productId));
               
-              // Si la nota se queda sin ítems o sin monto, aplícale .filter() (no la incluyas en acc)
+              // Si la nota queda en $0 o vacía, quítala (Borrado en cascada condicional)
               if (newDetails.length === 0 || newTotal <= 0) {
                 return acc;
               }
@@ -198,15 +270,11 @@ export const dataService = {
               // Si la nota estaba pagada, devolver el dinero al sobre 4 (Capital) localmente
               if (note.status === 'Paid') {
                 this._envelopes = this._envelopes.map(env => 
-                  env.id === 'ENV4' ? { ...env, balance: (Number(env.balance) || 0) + (Number(inputToDelete.totalCost) || 0) } : env
+                  env.id === 'ENV4' ? { ...env, balance: (Number(env.balance) || 0) + cost } : env
                 );
               }
 
-              acc.push({
-                ...note,
-                totalAmount: newTotal,
-                detailsJson: JSON.stringify(newDetails)
-              });
+              acc.push({ ...note, totalAmount: newTotal, detailsJson: JSON.stringify(newDetails) });
             } else {
               acc.push(note);
             }
