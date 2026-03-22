@@ -160,7 +160,7 @@ export const dataService = {
     if (res && res.success) {
       const inputToDelete = this._inputs.find(i => i.id === id);
       if (inputToDelete) {
-        // 1. Restar del stock en Products
+        // 1. Actualizar this._products restando la cantidad del stock
         this._products = this._products.map(p => {
           if (String(p.id) === String(inputToDelete.productId)) {
             return {
@@ -173,11 +173,12 @@ export const dataService = {
           return p;
         });
 
-        // 2. Actualizar la nota padre si existe
+        // 2. Actualizar this._purchaseNotes: busca la nota padre
         const noteRef = inputToDelete.notes || "";
         if (noteRef.startsWith("Compra: ")) {
           const noteId = noteRef.replace("Compra: ", "").trim();
-          this._purchaseNotes = this._purchaseNotes.map(note => {
+          
+          this._purchaseNotes = this._purchaseNotes.reduce((acc, note) => {
             if (note.id === noteId) {
               const currentTotal = Number(note.totalAmount) || 0;
               const newTotal = Math.max(0, currentTotal - (Number(inputToDelete.totalCost) || 0));
@@ -189,6 +190,11 @@ export const dataService = {
               
               const newDetails = details.filter((item: any) => String(item.productId) !== String(inputToDelete.productId));
               
+              // Si la nota se queda sin ítems o sin monto, aplícale .filter() (no la incluyas en acc)
+              if (newDetails.length === 0 || newTotal <= 0) {
+                return acc;
+              }
+
               // Si la nota estaba pagada, devolver el dinero al sobre 4 (Capital) localmente
               if (note.status === 'Paid') {
                 this._envelopes = this._envelopes.map(env => 
@@ -196,17 +202,19 @@ export const dataService = {
                 );
               }
 
-              return {
+              acc.push({
                 ...note,
                 totalAmount: newTotal,
                 detailsJson: JSON.stringify(newDetails)
-              };
+              });
+            } else {
+              acc.push(note);
             }
-            return note;
-          });
+            return acc;
+          }, [] as PurchaseNote[]);
         }
 
-        // 3. Eliminar de Inputs
+        // 3. Filtra el input de this._inputs
         this._inputs = this._inputs.filter(i => i.id !== id);
         
         this._notify();
@@ -279,11 +287,11 @@ export const dataService = {
     if (res && res.success) {
       const noteToDelete = this._purchaseNotes.find(n => n.id === id);
       if (noteToDelete) {
-        // 1. Identificar inputs vinculados
+        // 1. Encuentra todos los inputs en this._inputs vinculados a esa nota
         const noteMatch = "Compra: " + id;
         const linkedInputs = this._inputs.filter(i => i.notes === noteMatch);
 
-        // 2. Revertir stock de cada input vinculado
+        // 2. Revertir stock de cada input vinculado en this._products
         this._products = this._products.map(p => {
           const inputsForThisProduct = linkedInputs.filter(i => String(i.productId) === String(p.id));
           if (inputsForThisProduct.length > 0) {
@@ -299,13 +307,11 @@ export const dataService = {
           return p;
         });
 
-        // 3. Eliminar inputs vinculados
+        // 3. Usa .filter() para eliminar la nota de this._purchaseNotes y los inputs de this._inputs
         this._inputs = this._inputs.filter(i => i.notes !== noteMatch);
-
-        // 4. Eliminar la nota
         this._purchaseNotes = this._purchaseNotes.filter(n => n.id !== id);
 
-        // 5. Si estaba pagada, devolver capital al sobre 4
+        // 4. Si estaba pagada, devolver capital al sobre 4
         if (noteToDelete.status === 'Paid') {
           this._envelopes = this._envelopes.map(e => 
             e.id === 'ENV4' ? { ...e, balance: (Number(e.balance) || 0) + (Number(noteToDelete.totalAmount) || 0) } : e

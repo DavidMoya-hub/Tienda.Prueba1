@@ -634,7 +634,7 @@ function deleteInput(id) {
       const noteRef = data[i][8] || ""; // Columna 'notes'
       
       // 1. Restar del inventario maestro
-      updateProductStock(productId, quantity, totalCost, false);
+      updateProductStock(productId, quantity, 0, false);
       
       // 2. Actualización en Cascada Ascendente: Si pertenece a una nota, actualizarla
       if (noteRef.startsWith("Compra: ")) {
@@ -651,6 +651,7 @@ function deleteInput(id) {
 
 /**
  * Actualiza el total y el JSON de detalles de una nota de compra tras borrar un input individual.
+ * Si la nota queda vacía o sin monto, se elimina.
  */
 function updateParentNoteAfterInputDelete(noteId, productId, inputTotalCost) {
   const sheet = getSheet("PurchaseNotes");
@@ -670,8 +671,13 @@ function updateParentNoteAfterInputDelete(noteId, productId, inputTotalCost) {
       // Filtrar el producto borrado del JSON de detalles
       const newDetails = details.filter(item => String(item.productId) !== String(productId));
       
-      sheet.getRange(i + 1, 4).setValue(newTotal); // totalAmount
-      sheet.getRange(i + 1, 6).setValue(JSON.stringify(newDetails)); // detailsJson
+      // CONDICIÓN CRÍTICA: Si el nuevo detailsJson queda vacío o el totalAmount es <= 0, elimina la fila completa
+      if (newDetails.length === 0 || newTotal <= 0) {
+        sheet.deleteRow(i + 1);
+      } else {
+        sheet.getRange(i + 1, 4).setValue(newTotal); // totalAmount
+        sheet.getRange(i + 1, 6).setValue(JSON.stringify(newDetails)); // detailsJson
+      }
       
       // Si la nota estaba pagada, devolver el dinero al sobre 4 (Capital)
       const status = data[i][4];
@@ -736,26 +742,26 @@ function deletePurchaseNote(id) {
   const noteMatch = "Compra: " + noteId;
   
   // 1. Borrado en Cascada Descendente: Buscar y revertir inputs hijos
+  // Recorrer de abajo hacia arriba para evitar error de índices al borrar filas
   for (let i = inputData.length - 1; i >= 1; i--) {
     if (String(inputData[i][8]).trim() === noteMatch) {
       const productId = inputData[i][1];
       const quantity = parseAmount(inputData[i][3]);
-      const totalCost = parseAmount(inputData[i][5]);
       
-      // Restar del inventario
-      updateProductStock(productId, quantity, totalCost, false);
+      // 2. Revertir Inventario: Restar del stock
+      updateProductStock(productId, quantity, 0, false);
       
-      // Eliminar fila de input
+      // 3. Limpiar Hijos: Eliminar fila de input
       inputSheet.deleteRow(i + 1);
     }
   }
   
-  // 2. Si estaba pagada, devolver capital al sobre 4
+  // Si la nota estaba pagada, devolver capital al sobre 4
   if (noteStatus === 'Paid') {
     updateEnvelopeBalance("ENV4", noteTotal);
   }
 
-  // 3. Eliminar la nota padre
+  // 4. Eliminar Padre: Eliminar la nota padre
   noteSheet.deleteRow(noteRow);
   return { success: true };
 }
