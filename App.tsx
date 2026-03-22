@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { HashRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
+import { HashRouter, Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, Package, PlusCircle, History, 
   RefreshCcw, ClipboardCheck, Wallet, Store,
@@ -73,6 +73,11 @@ const Sidebar: React.FC<{ isOpen: boolean, onClose: () => void }> = ({ isOpen, o
     </aside>
   </>
 );
+
+const CountWrapper = () => {
+  const navigate = useNavigate();
+  return <DailyInventoryCount onContinueToCorte={() => navigate('/closing')} />;
+};
 
 const App: React.FC = () => {
   const [initialLoaded, setInitialLoaded] = useState(false);
@@ -153,7 +158,7 @@ const App: React.FC = () => {
               <Route path="/" element={<Dashboard />} />
               <Route path="/closing" element={<DailyClosingView />} />
               <Route path="/products" element={<ProductsTable />} />
-              <Route path="/count" element={<DailyInventoryCount />} />
+              <Route path="/count" element={<CountWrapper />} />
               <Route path="/envelopes" element={<EnvelopesManager />} />
               <Route path="/inventory" element={<Inventory />} />
               <Route path="/register" element={<ProductRegistration />} />

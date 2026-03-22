@@ -9,20 +9,19 @@ const DailyClosingView: React.FC = () => {
   const allOutputs = dataService.getOutputs();
   const allClosings = dataService.getClosings();
 
-  const [manualSales, setManualSales] = useState<any[]>([]);
+  const [soldItems, setSoldItems] = useState<any[]>([]);
   const [excludedDebts, setExcludedDebts] = useState<Set<string>>(new Set());
   const [debtPaymentMethods, setDebtPaymentMethods] = useState<Record<string, 'Sales' | 'Capital'>>({});
   const [saved, setSaved] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [notes, setNotes] = useState('');
-  const [draftAvailable, setDraftAvailable] = useState(false);
 
   useEffect(() => {
-    const checkDraft = () => {
-      setDraftAvailable(dataService.getDraftPhysicalCount().length > 0);
-    };
-    checkDraft();
-    return dataService.subscribe(checkDraft);
+    const draftData = dataService.getDraftClosingData();
+    if (draftData) {
+      setSoldItems(draftData);
+      dataService.clearDraftClosingData();
+    }
   }, []);
 
   // Find the last closing date to filter outputs
@@ -47,13 +46,13 @@ const DailyClosingView: React.FC = () => {
   }, [products, searchTerm]);
 
   const addSaleItem = (product: any, quantity: number) => {
-    setManualSales([...manualSales, {
+    setSoldItems([...soldItems, {
       id: "MAN-" + Math.random().toString(36).substr(2, 9),
       productId: product.id,
-      name: product.name,
+      productName: product.name,
       quantity,
       salePrice: product.salePrice,
-      costPrice: product.costPrice,
+      unitCost: product.costPrice,
       totalSale: product.salePrice * quantity,
       totalCost: product.costPrice * quantity
     }]);
@@ -61,14 +60,14 @@ const DailyClosingView: React.FC = () => {
   };
 
   const updateManualQuantity = (id: string, delta: number) => {
-    setManualSales(manualSales.map(item => {
-      if (item.id === id) {
+    setSoldItems(soldItems.map(item => {
+      if (item.id === id || item.productId === id) {
         const newQty = Math.max(1, item.quantity + delta);
         return {
           ...item,
           quantity: newQty,
           totalSale: item.salePrice * newQty,
-          totalCost: item.costPrice * newQty
+          totalCost: item.unitCost * newQty
         };
       }
       return item;
@@ -97,43 +96,10 @@ const DailyClosingView: React.FC = () => {
     setDebtPaymentMethods(prev => ({ ...prev, [id]: method }));
   };
 
-  const loadPhysicalCount = () => {
-    const draft = dataService.getDraftPhysicalCount();
-    if (draft.length === 0) return;
-    
-    const newSales = draft.map(item => {
-      const prod = products.find(p => String(p.id) === String(item.productId));
-      const cost = prod ? (Number(prod.costPrice) || 0) : 0;
-      return {
-        id: item.id,
-        productId: item.productId,
-        name: item.productName,
-        quantity: item.quantity,
-        salePrice: item.salePrice,
-        costPrice: cost,
-        totalSale: item.totalSale,
-        totalCost: cost * item.quantity
-      };
-    });
-    
-    setManualSales(prev => [...prev, ...newSales]);
-    dataService.setDraftPhysicalCount([]); // Limpiar tras cargar
-  };
-
   // Financial Calculations
-  const periodSalesTotal = periodOutputs.reduce((acc, o) => acc + (Number(o.totalSale) || 0), 0);
-  const manualSalesTotal = manualSales.reduce((acc, i) => acc + i.totalSale, 0);
-  const totalSold = periodSalesTotal + manualSalesTotal;
-
-  const periodCOGSTotal = periodOutputs.reduce((acc, o) => {
-    const prod = products.find(p => String(p.id) === String(o.productId));
-    const cost = prod ? (Number(prod.costPrice) || 0) : 0;
-    return acc + (o.quantity * cost);
-  }, 0);
-  const manualCOGSTotal = manualSales.reduce((acc, i) => acc + i.totalCost, 0);
-  const totalCOGS = periodCOGSTotal + manualCOGSTotal;
-
-  const netProfit = totalSold - totalCOGS;
+  const totalSold = useMemo(() => soldItems.reduce((acc, item) => acc + (item.quantity * item.salePrice), 0), [soldItems]);
+  const totalCOGS = useMemo(() => soldItems.reduce((acc, item) => acc + (item.quantity * item.unitCost), 0), [soldItems]);
+  const netProfit = useMemo(() => totalSold - totalCOGS, [totalSold, totalCOGS]);
 
   const debtsPaidWithSales = debtsToPay.reduce((acc, n) => {
     const method = debtPaymentMethods[n.id] || 'Sales';
@@ -151,19 +117,12 @@ const DailyClosingView: React.FC = () => {
     try {
       const closingId = Math.random().toString(36).substr(2, 9);
       
-      // 1. Preparar lista de productos (Ventas del periodo + Manuales)
-      const productsList = [
-        ...periodOutputs.map(o => ({
-          productId: o.productId,
-          quantity: o.quantity,
-          totalSale: o.totalSale
-        })),
-        ...manualSales.map(s => ({
-          productId: s.productId,
-          quantity: s.quantity,
-          totalSale: s.totalSale
-        }))
-      ];
+      // 1. Preparar lista de productos
+      const productsList = soldItems.map(s => ({
+        productId: s.productId,
+        quantity: s.quantity,
+        totalSale: s.totalSale
+      }));
 
       // 2. Preparar deudas a pagar
       const debtsToPayList = debtsToPay.map(n => ({
@@ -188,7 +147,7 @@ const DailyClosingView: React.FC = () => {
       });
 
       setSaved(true);
-      setManualSales([]);
+      setSoldItems([]);
       setExcludedDebts(new Set());
       setDebtPaymentMethods({});
       setNotes('');
@@ -249,17 +208,8 @@ const DailyClosingView: React.FC = () => {
             <h3 className="text-lg font-black text-slate-800 flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <PlusCircle className="text-blue-500" size={20} />
-                <span>Agregar Ventas Faltantes</span>
+                <span>Productos en el Corte</span>
               </div>
-              {draftAvailable && (
-                <button 
-                  onClick={loadPhysicalCount}
-                  className="flex items-center gap-2 bg-amber-500 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-amber-600 transition-all shadow-lg shadow-amber-200"
-                >
-                  <RefreshCcw size={14} />
-                  Cargar Conteo Físico
-                </button>
-              )}
             </h3>
             <div className="relative">
               <input 
@@ -289,19 +239,19 @@ const DailyClosingView: React.FC = () => {
             </div>
 
             <div className="space-y-3">
-              {manualSales.map((item) => (
-                <div key={item.id} className="flex items-center justify-between p-3 bg-blue-50/30 rounded-xl border border-blue-100">
+              {soldItems.map((item) => (
+                <div key={item.id || item.productId} className="flex items-center justify-between p-3 bg-blue-50/30 rounded-xl border border-blue-100">
                   <div className="flex items-center space-x-3">
                     <div className="flex items-center bg-white rounded-lg border border-blue-100 p-1">
-                      <button onClick={() => updateManualQuantity(item.id, -1)} className="p-1 text-blue-600"><Minus size={12} /></button>
+                      <button onClick={() => updateManualQuantity(item.id || item.productId, -1)} className="p-1 text-blue-600"><Minus size={12} /></button>
                       <span className="w-6 text-center font-black text-blue-900 text-xs">{item.quantity}</span>
-                      <button onClick={() => updateManualQuantity(item.id, 1)} className="p-1 text-blue-600"><Plus size={12} /></button>
+                      <button onClick={() => updateManualQuantity(item.id || item.productId, 1)} className="p-1 text-blue-600"><Plus size={12} /></button>
                     </div>
-                    <span className="font-bold text-slate-800 text-sm">{item.name}</span>
+                    <span className="font-bold text-slate-800 text-sm">{item.productName || item.name}</span>
                   </div>
                   <div className="flex items-center space-x-3">
-                    <span className="font-black text-slate-900 text-sm">${item.totalSale.toFixed(2)}</span>
-                    <button onClick={() => setManualSales(manualSales.filter(i => i.id !== item.id))} className="text-red-400"><X size={14} /></button>
+                    <span className="font-black text-slate-900 text-sm">${(item.quantity * item.salePrice).toFixed(2)}</span>
+                    <button onClick={() => setSoldItems(soldItems.filter(i => i.id !== item.id && i.productId !== item.productId))} className="text-red-400"><X size={14} /></button>
                   </div>
                 </div>
               ))}
@@ -403,6 +353,20 @@ const DailyClosingView: React.FC = () => {
                   <span className="text-4xl font-black text-blue-400 tracking-tighter">${cashInBox.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                 </div>
                 <p className="text-[10px] text-blue-400/60 mt-2 font-bold uppercase tracking-tight">Ventas Totales - Deudas pagadas con ventas</p>
+              </div>
+
+              <div className="space-y-4 border-t border-slate-800 pt-6">
+                <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em]">Distribución Proyectada</h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-slate-800/50 p-3 rounded-xl border border-slate-700">
+                    <span className="text-[8px] font-bold text-slate-500 uppercase block">Capital (Sobre 4)</span>
+                    <span className="text-sm font-black text-blue-400">${totalCOGS.toLocaleString()}</span>
+                  </div>
+                  <div className="bg-slate-800/50 p-3 rounded-xl border border-slate-700">
+                    <span className="text-[8px] font-bold text-slate-500 uppercase block">Utilidad (1/3 c/u)</span>
+                    <span className="text-sm font-black text-emerald-400">${(netProfit > 0 ? netProfit / 3 : 0).toLocaleString()}</span>
+                  </div>
+                </div>
               </div>
 
               <div className="space-y-2">

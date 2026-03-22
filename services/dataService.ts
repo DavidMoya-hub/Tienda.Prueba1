@@ -66,6 +66,7 @@ export const dataService = {
   _closings: [] as DailyClosing[],
   _priceHistory: [] as PriceHistory[],
   _draftPhysicalCount: [] as OutputTransaction[],
+  _draftClosingData: null as any[] | null,
   _listeners: [] as (() => void)[],
 
   subscribe(listener: () => void) {
@@ -136,6 +137,15 @@ export const dataService = {
   getDraftPhysicalCount() { return this._draftPhysicalCount; },
   setDraftPhysicalCount(draft: OutputTransaction[]) {
     this._draftPhysicalCount = draft;
+    this._notify();
+  },
+  setDraftClosingData(data: any[]) { 
+    this._draftClosingData = data; 
+    this._notify();
+  },
+  getDraftClosingData() { return this._draftClosingData; },
+  clearDraftClosingData() { 
+    this._draftClosingData = null; 
     this._notify();
   },
 

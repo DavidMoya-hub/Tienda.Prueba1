@@ -5,7 +5,11 @@ import { dataService } from '../services/dataService';
 import { processInventoryImage } from '../services/geminiService';
 import Modal from './Modal';
 
-const DailyInventoryCount: React.FC = () => {
+interface Props {
+  onContinueToCorte?: () => void;
+}
+
+const DailyInventoryCount: React.FC<Props> = ({ onContinueToCorte }) => {
   const products = dataService.getProducts();
   const purchaseNotes = dataService.getPurchaseNotes();
   const envelopes = dataService.getEnvelopes();
@@ -112,9 +116,42 @@ const DailyInventoryCount: React.FC = () => {
     
     setIsProcessing(true);
     try {
-      const res = await dataService.processPhysicalCount(counts, 'Daily Count');
-      setSummary(res);
-      if (pendingNotes.length > 0) setShowDebtModal(true);
+      // Calcular productos vendidos (faltantes)
+      const soldItems: any[] = [];
+      Object.entries(counts).forEach(([id, val]) => {
+        const product = products.find(p => String(p.id) === String(id));
+        if (product) {
+          const systemStock = Number(product.stock) || 0;
+          const physicalCount = Number(val) || 0;
+          const difference = systemStock - physicalCount;
+          
+          if (difference > 0) {
+            soldItems.push({
+              productId: product.id,
+              productName: product.name,
+              quantity: difference,
+              unitCost: product.costPrice,
+              salePrice: product.salePrice,
+              totalSale: difference * product.salePrice,
+              totalCost: difference * product.costPrice
+            });
+          }
+        }
+      });
+
+      if (soldItems.length === 0) {
+        setModal({
+          isOpen: true,
+          title: 'Sin Ventas',
+          message: "No se detectaron faltantes (ventas) en el conteo.",
+          type: 'info'
+        });
+        setIsProcessing(false);
+        return;
+      }
+
+      dataService.setDraftClosingData(soldItems);
+      if (onContinueToCorte) onContinueToCorte();
     } catch (e: any) {
       setModal({
         isOpen: true,
@@ -334,8 +371,8 @@ const DailyInventoryCount: React.FC = () => {
             disabled={isProcessing || Object.keys(counts).length === 0}
             className="w-full md:w-auto flex items-center justify-center space-x-4 bg-red-600 text-white px-8 md:px-16 py-4 md:py-6 rounded-2xl font-black hover:bg-red-500 transition-all shadow-2xl shadow-red-900/50 active:scale-95 disabled:opacity-30 disabled:grayscale text-lg md:text-xl tracking-tighter"
           >
-            {isProcessing ? <RefreshCcw className="animate-spin" /> : <Save size={28} />}
-            <span>Procesar y Cerrar</span>
+            {isProcessing ? <RefreshCcw className="animate-spin" /> : <ArrowRight size={28} />}
+            <span>Continuar a Corte de Caja</span>
           </button>
         </div>
       </div>
