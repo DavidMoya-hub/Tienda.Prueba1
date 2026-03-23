@@ -13,6 +13,7 @@ const HistoryView: React.FC = () => {
   const [endDate, setEndDate] = useState('');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [selectedNote, setSelectedNote] = useState<PurchaseNote | null>(null);
+  const [selectedDetail, setSelectedDetail] = useState<any>(null);
   const [isEditingDetails, setIsEditingDetails] = useState(false);
   const [editedDetails, setEditedDetails] = useState<any[]>([]);
   
@@ -84,6 +85,10 @@ const HistoryView: React.FC = () => {
     setSelectedNote(note);
     setEditedDetails(parseDetails(note.detailsJson));
     setIsEditingDetails(false);
+  };
+
+  const handleOpenItemDetails = (item: any) => {
+    setSelectedDetail(item);
   };
 
   const handleQuantityChange = (index: number, newQty: number) => {
@@ -419,7 +424,11 @@ const HistoryView: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-emerald-50 text-xs md:text-sm">
                 {sortedOutputs.map(log => (
-                  <tr key={log.id} className="hover:bg-emerald-50/30 transition-colors group">
+                  <tr 
+                    key={log.id} 
+                    onClick={() => handleOpenItemDetails(log)}
+                    className="hover:bg-emerald-50/30 transition-colors group cursor-pointer"
+                  >
                     <td className="px-4 md:px-8 py-3 md:py-5 text-slate-400 font-bold">{new Date(log.date).toLocaleDateString()}</td>
                     <td className="px-4 md:px-8 py-3 md:py-5 font-black text-slate-800 text-sm md:text-base">{log.productName}</td>
                     <td className="px-4 md:px-8 py-3 md:py-5 font-black text-emerald-900"><span className="bg-emerald-50 px-2 md:px-3 py-1 rounded-lg">{log.quantity}</span></td>
@@ -430,13 +439,20 @@ const HistoryView: React.FC = () => {
                     <td className="px-4 md:px-8 py-3 md:py-5 text-right">
                       <div className="flex items-center justify-end space-x-2">
                         <button 
-                          onClick={() => { setEditingItem({...log}); setEditType('Output'); }}
+                          onClick={(e) => { e.stopPropagation(); handleOpenItemDetails(log); }}
+                          className="p-2 text-emerald-600 hover:bg-emerald-100 rounded-xl transition-colors bg-emerald-50"
+                          title="Ver Detalle"
+                        >
+                          <Eye size={16} />
+                        </button>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); setEditingItem({...log}); setEditType('Output'); }}
                           className="p-2 text-blue-600 hover:bg-blue-100 rounded-xl transition-colors bg-blue-50"
                         >
                           <Edit size={16} />
                         </button>
                         <button 
-                          onClick={() => handleDelete(log.id, 'Output')}
+                          onClick={(e) => { e.stopPropagation(); handleDelete(log.id, 'Output'); }}
                           className="p-2 text-red-600 hover:bg-red-100 rounded-xl transition-colors bg-red-50"
                         >
                           <Trash2 size={16} />
@@ -466,7 +482,11 @@ const HistoryView: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-blue-50 text-xs md:text-sm">
                 {sortedClosings.map(log => (
-                  <tr key={log.id} className="hover:bg-blue-50/30 transition-colors group">
+                  <tr 
+                    key={log.id} 
+                    onClick={() => handleOpenItemDetails(log)}
+                    className="hover:bg-blue-50/30 transition-colors group cursor-pointer"
+                  >
                     <td className="px-4 md:px-8 py-3 md:py-5 font-black text-slate-800">{new Date(log.date).toLocaleString()}</td>
                     <td className="px-4 md:px-8 py-3 md:py-5 text-blue-600 font-black text-lg md:text-xl tracking-tighter">${Number(log.totalSold)?.toLocaleString()}</td>
                     <td className="px-4 md:px-8 py-3 md:py-5 text-slate-400 font-bold">-${Number(log.cogs)?.toLocaleString()}</td>
@@ -476,13 +496,20 @@ const HistoryView: React.FC = () => {
                     <td className="px-4 md:px-8 py-3 md:py-5 text-right">
                       <div className="flex items-center justify-end space-x-2">
                         <button 
-                          onClick={() => { setEditingItem({...log}); setEditType('Closing'); }}
+                          onClick={(e) => { e.stopPropagation(); handleOpenItemDetails(log); }}
+                          className="p-2 text-blue-600 hover:bg-blue-100 rounded-xl transition-colors bg-blue-50"
+                          title="Ver Detalle"
+                        >
+                          <Eye size={16} />
+                        </button>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); setEditingItem({...log}); setEditType('Closing'); }}
                           className="p-2 text-blue-600 hover:bg-blue-100 rounded-xl transition-colors bg-blue-50"
                         >
                           <Edit size={16} />
                         </button>
                         <button 
-                          onClick={() => handleDelete(log.id, 'Closing')}
+                          onClick={(e) => { e.stopPropagation(); handleDelete(log.id, 'Closing'); }}
                           className="p-2 text-red-600 hover:bg-red-100 rounded-xl transition-colors bg-red-50"
                         >
                           <Trash2 size={16} />
@@ -802,6 +829,151 @@ const HistoryView: React.FC = () => {
           </div>
         </div>
       )}
+      
+      {selectedDetail && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
+            <div className={`p-6 md:p-8 text-white flex justify-between items-center ${selectedDetail.totalSold !== undefined ? 'bg-red-600' : 'bg-emerald-600'}`}>
+              <div>
+                <h3 className="text-xl md:text-2xl font-black tracking-tight">
+                  {selectedDetail.totalSold !== undefined ? 'Detalle de Corte Maestro' : 'Detalle de Salida'}
+                </h3>
+                <p className="text-white/70 text-xs font-bold uppercase tracking-widest">
+                  {new Date(selectedDetail.date).toLocaleString()}
+                </p>
+              </div>
+              <button onClick={() => setSelectedDetail(null)} className="text-white/70 hover:text-white transition-colors">
+                <X size={24} />
+              </button>
+            </div>
+            
+            <div className="p-6 md:p-8 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                {selectedDetail.totalSold !== undefined ? (
+                  <>
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Venta Bruta</label>
+                      <p className="font-black text-blue-600 text-lg">${Number(selectedDetail.totalSold).toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Utilidad Neta</label>
+                      <p className="font-black text-emerald-600 text-lg">${Number(selectedDetail.netProfit).toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Efectivo en Caja</label>
+                      <p className="font-black text-blue-900 text-lg">${Number(selectedDetail.cashInBox || selectedDetail.totalSold).toLocaleString()}</p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Producto Principal</label>
+                      <p className="font-black text-slate-800">{selectedDetail.productName}</p>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Venta Total</label>
+                      <p className="font-black text-emerald-600 text-lg">${Number(selectedDetail.totalSale).toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Turno</label>
+                      <p className="font-black text-slate-800 uppercase">{selectedDetail.shift || 'N/A'}</p>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div className="space-y-4">
+                <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
+                  <ClipboardList size={16} className={selectedDetail.totalSold !== undefined ? 'text-red-600' : 'text-emerald-600'} />
+                  <span>Desglose de Productos</span>
+                </h4>
+                
+                <div className="border border-slate-100 rounded-2xl overflow-hidden">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 text-slate-400 font-black uppercase tracking-widest">
+                      <tr>
+                        <th className="px-4 py-3">Producto</th>
+                        <th className="px-4 py-3 text-center">Cant</th>
+                        <th className="px-4 py-3 text-right">Precio</th>
+                        <th className="px-4 py-3 text-right">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {(() => {
+                        let parsed = [];
+                        try {
+                          parsed = JSON.parse(selectedDetail.soldProductsJson || selectedDetail.detailsJson || '[]');
+                        } catch (e) {
+                          parsed = [];
+                        }
+
+                        // Fallback para registros antiguos de Salida
+                        if (parsed.length === 0 && selectedDetail.productName && selectedDetail.totalSold === undefined) {
+                          parsed = [{
+                            productName: selectedDetail.productName,
+                            quantity: selectedDetail.quantity,
+                            salePrice: selectedDetail.totalSale / (selectedDetail.quantity || 1),
+                            totalSale: selectedDetail.totalSale
+                          }];
+                        }
+
+                        return parsed.map((item: any, idx: number) => (
+                          <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                            <td className="px-4 py-3 font-bold text-slate-800">{item.productName}</td>
+                            <td className="px-4 py-3 text-center font-black text-blue-600">
+                              <span className="bg-blue-50 px-2 py-0.5 rounded-md">{item.quantity}</span>
+                            </td>
+                            <td className="px-4 py-3 text-right text-slate-500">
+                              ${Number(item.salePrice || item.unitCost || 0).toFixed(2)}
+                            </td>
+                            <td className="px-4 py-3 text-right font-black text-slate-900">
+                              ${Number(item.totalSale || item.totalCost || 0).toFixed(2)}
+                            </td>
+                          </tr>
+                        ));
+                      })()}
+                      {(() => {
+                        let parsed = [];
+                        try {
+                          parsed = JSON.parse(selectedDetail.soldProductsJson || selectedDetail.detailsJson || '[]');
+                        } catch (e) { parsed = []; }
+                        
+                        if (parsed.length === 0 && (!selectedDetail.productName || selectedDetail.totalSold !== undefined)) {
+                          return (
+                            <tr>
+                              <td colSpan={4} className="px-4 py-8 text-center text-slate-400 font-bold italic">
+                                No se encontraron detalles desglosados para este registro.
+                              </td>
+                            </tr>
+                          );
+                        }
+                        return null;
+                      })()}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              
+              {selectedDetail.notes && (
+                <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100">
+                  <label className="block text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1">Notas del Registro</label>
+                  <p className="text-sm text-slate-700 font-medium italic">"{selectedDetail.notes}"</p>
+                </div>
+              )}
+            </div>
+            
+            <div className="p-6 bg-slate-50 border-t border-slate-100">
+              <button 
+                onClick={() => setSelectedDetail(null)}
+                className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black hover:bg-slate-800 transition-all shadow-xl shadow-slate-200 uppercase tracking-widest text-xs"
+              >
+                Cerrar Detalle
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {selectedNote && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
           <div className="bg-white rounded-[2.5rem] w-full max-w-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
