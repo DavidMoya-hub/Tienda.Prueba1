@@ -13,6 +13,22 @@ const ProductRegistration: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const handleEnterPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const formInputs = Array.from(
+        document.querySelectorAll('input:not([disabled]):not([type="checkbox"]):not([type="hidden"]), select:not([disabled])')
+      ) as (HTMLInputElement | HTMLSelectElement)[];
+      const index = formInputs.indexOf(e.currentTarget as any);
+      if (index > -1 && index < formInputs.length - 1) {
+        formInputs[index + 1].focus();
+        if ('select' in formInputs[index + 1]) {
+          (formInputs[index + 1] as HTMLInputElement).select();
+        }
+      }
+    }
+  };
+
   const editMode = !!location.state?.product;
 
   const [formData, setFormData] = useState({
@@ -166,6 +182,7 @@ const ProductRegistration: React.FC = () => {
               required
               value={formData.code}
               onChange={(e) => setFormData({...formData, code: e.target.value})}
+              onKeyDown={handleEnterPress}
               className="w-full px-4 md:px-5 py-3 md:py-4 bg-blue-50/30 border-2 border-transparent rounded-xl md:rounded-2xl focus:bg-white focus:border-blue-500 focus:outline-none transition-all font-bold text-slate-800 text-sm md:text-base"
               placeholder="Ej. 750100..."
             />
@@ -175,6 +192,7 @@ const ProductRegistration: React.FC = () => {
             <select 
               value={formData.category}
               onChange={(e) => setFormData({...formData, category: e.target.value})}
+              onKeyDown={handleEnterPress as any}
               className="w-full px-4 md:px-5 py-3 md:py-4 bg-blue-50/30 border-2 border-transparent rounded-xl md:rounded-2xl focus:bg-white focus:border-blue-500 focus:outline-none transition-all font-bold text-slate-800 text-sm md:text-base"
             >
               <option>General</option>
@@ -194,6 +212,7 @@ const ProductRegistration: React.FC = () => {
             required
             value={formData.name}
             onChange={(e) => setFormData({...formData, name: e.target.value})}
+            onKeyDown={handleEnterPress}
             className="w-full px-4 md:px-5 py-3 md:py-4 bg-blue-50/30 border-2 border-transparent rounded-xl md:rounded-2xl focus:bg-white focus:border-blue-500 focus:outline-none transition-all font-bold text-slate-800 text-sm md:text-base"
             placeholder="Ej. Coca-Cola Original"
           />
@@ -205,6 +224,7 @@ const ProductRegistration: React.FC = () => {
             <input 
               value={formData.provider}
               onChange={(e) => setFormData({...formData, provider: e.target.value})}
+              onKeyDown={handleEnterPress}
               className="w-full px-4 md:px-5 py-3 md:py-4 bg-blue-50/30 border-2 border-transparent rounded-xl md:rounded-2xl focus:bg-white focus:border-blue-500 focus:outline-none transition-all font-bold text-slate-800 text-sm md:text-base"
               placeholder="Ej. PepsiCo / Marinela"
             />
@@ -214,6 +234,7 @@ const ProductRegistration: React.FC = () => {
             <input 
               value={formData.grams}
               onChange={(e) => setFormData({...formData, grams: e.target.value})}
+              onKeyDown={handleEnterPress}
               className="w-full px-4 md:px-5 py-3 md:py-4 bg-blue-50/30 border-2 border-transparent rounded-xl md:rounded-2xl focus:bg-white focus:border-blue-500 focus:outline-none transition-all font-bold text-slate-800 text-sm md:text-base"
               placeholder="Ej. 600ml"
             />
@@ -228,6 +249,7 @@ const ProductRegistration: React.FC = () => {
               type="number" step="0.01"
               value={formData.costPrice}
               onChange={(e) => setFormData({...formData, costPrice: e.target.value})}
+              onKeyDown={handleEnterPress}
               className="w-full px-4 md:px-5 py-3 md:py-4 bg-red-50/50 border-2 border-transparent rounded-xl md:rounded-2xl focus:bg-white focus:border-red-500 focus:outline-none transition-all font-black text-red-600 text-base md:text-lg"
             />
           </div>
@@ -238,6 +260,7 @@ const ProductRegistration: React.FC = () => {
               type="number" step="0.01"
               value={formData.salePrice}
               onChange={(e) => setFormData({...formData, salePrice: e.target.value})}
+              onKeyDown={handleEnterPress}
               className="w-full px-4 md:px-5 py-3 md:py-4 bg-blue-50/50 border-2 border-transparent rounded-xl md:rounded-2xl focus:bg-white focus:border-blue-500 focus:outline-none transition-all font-black text-blue-600 text-base md:text-lg"
             />
           </div>
@@ -248,6 +271,7 @@ const ProductRegistration: React.FC = () => {
               type="number"
               value={formData.stock}
               onChange={(e) => setFormData({...formData, stock: e.target.value})}
+              onKeyDown={handleEnterPress}
               className="w-full px-4 md:px-5 py-3 md:py-4 bg-slate-50 border-2 border-transparent rounded-xl md:rounded-2xl focus:bg-white focus:border-slate-800 focus:outline-none transition-all font-black text-slate-800 text-base md:text-lg"
             />
           </div>

@@ -27,6 +27,20 @@ const DailyInventoryCount: React.FC<Props> = ({ onContinueToCorte }) => {
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const handleEnterPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const formInputs = Array.from(
+        document.querySelectorAll('input:not([disabled]):not([type="checkbox"]):not([type="hidden"])')
+      ) as HTMLInputElement[];
+      const index = formInputs.indexOf(e.currentTarget);
+      if (index > -1 && index < formInputs.length - 1) {
+        formInputs[index + 1].focus();
+        formInputs[index + 1].select();
+      }
+    }
+  };
+
   const filteredProducts = useMemo(() => {
     const searchLower = searchTerm.toLowerCase();
     return products.filter(p => 
@@ -332,6 +346,7 @@ const DailyInventoryCount: React.FC<Props> = ({ onContinueToCorte }) => {
                     placeholder={systemStock.toString()}
                     value={counts[p.id] !== undefined ? counts[p.id] : ''}
                     onChange={(e) => handleCountChange(p.id, e.target.value)}
+                    onKeyDown={handleEnterPress}
                     className={`w-10 md:w-28 p-1.5 md:p-4 border-2 border-transparent rounded-lg md:rounded-[1.5rem] text-center font-black text-xs md:text-xl focus:bg-white focus:outline-none transition-all shadow-inner ${
                       counts[p.id] !== undefined ? 'bg-red-50 text-red-600 border-red-200' : 'bg-slate-50 text-slate-400'
                     }`}

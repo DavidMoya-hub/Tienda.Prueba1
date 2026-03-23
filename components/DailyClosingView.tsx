@@ -16,6 +16,20 @@ const DailyClosingView: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [notes, setNotes] = useState('');
 
+  const handleEnterPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const formInputs = Array.from(
+        document.querySelectorAll('input:not([disabled]):not([type="checkbox"]):not([type="hidden"])')
+      ) as HTMLInputElement[];
+      const index = formInputs.indexOf(e.currentTarget);
+      if (index > -1 && index < formInputs.length - 1) {
+        formInputs[index + 1].focus();
+        formInputs[index + 1].select();
+      }
+    }
+  };
+
   useEffect(() => {
     const draftData = dataService.getDraftClosingData();
     if (draftData) {
@@ -218,6 +232,7 @@ const DailyClosingView: React.FC = () => {
                 placeholder="Buscar producto..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
+                onKeyDown={handleEnterPress}
                 className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:outline-none focus:border-blue-500 transition-all font-bold text-slate-700 text-sm"
               />
               {searchTerm && (
@@ -245,7 +260,17 @@ const DailyClosingView: React.FC = () => {
                   <div className="flex items-center space-x-3">
                     <div className="flex items-center bg-white rounded-lg border border-blue-100 p-1">
                       <button onClick={() => updateManualQuantity(item.id || item.productId, -1)} className="p-1 text-blue-600"><Minus size={12} /></button>
-                      <span className="w-6 text-center font-black text-blue-900 text-xs">{item.quantity}</span>
+                      <input 
+                        type="number"
+                        value={item.quantity}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value) || 1;
+                          const delta = val - item.quantity;
+                          updateManualQuantity(item.id || item.productId, delta);
+                        }}
+                        onKeyDown={handleEnterPress}
+                        className="w-8 text-center font-black text-blue-900 text-xs bg-transparent border-none outline-none focus:ring-0 appearance-none"
+                      />
                       <button onClick={() => updateManualQuantity(item.id || item.productId, 1)} className="p-1 text-blue-600"><Plus size={12} /></button>
                     </div>
                     <span className="font-bold text-slate-800 text-sm">{item.productName || item.name}</span>

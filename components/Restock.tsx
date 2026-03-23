@@ -30,6 +30,20 @@ const Restock: React.FC = () => {
   const capitalBalance = envelopes.find(e => e.id === "ENV4")?.balance || 0;
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const handleEnterPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const formInputs = Array.from(
+        document.querySelectorAll('input:not([disabled]):not([type="checkbox"]):not([type="hidden"])')
+      ) as HTMLInputElement[];
+      const index = formInputs.indexOf(e.currentTarget);
+      if (index > -1 && index < formInputs.length - 1) {
+        formInputs[index + 1].focus();
+        formInputs[index + 1].select();
+      }
+    }
+  };
+
   const filteredProducts = useMemo(() => {
     if (!searchTerm) return [];
     const searchLower = searchTerm.toLowerCase();
@@ -172,6 +186,7 @@ const Restock: React.FC = () => {
                 value={searchTerm}
                 onFocus={() => setIsSearching(true)}
                 onChange={(e) => setSearchTerm(e.target.value)}
+                onKeyDown={handleEnterPress}
                 className="w-full pl-12 md:pl-16 pr-4 md:pr-6 py-3 md:py-5 bg-blue-50/50 border-2 border-transparent rounded-xl md:rounded-3xl focus:bg-white focus:border-blue-500 transition-all font-black text-sm md:text-xl text-slate-800"
               />
             </div>
@@ -192,11 +207,11 @@ const Restock: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-8">
             <div className="space-y-1 md:space-y-2">
               <label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Proveedor</label>
-              <input value={provider} onChange={(e) => setProvider(e.target.value)} className="w-full p-3 md:p-5 bg-slate-50 border-2 border-transparent rounded-lg md:rounded-2xl font-black text-sm md:text-slate-800 focus:bg-white focus:border-slate-300 transition-all" placeholder="Ej. Marinela / Pepsi" />
+              <input value={provider} onChange={(e) => setProvider(e.target.value)} onKeyDown={handleEnterPress} className="w-full p-3 md:p-5 bg-slate-50 border-2 border-transparent rounded-lg md:rounded-2xl font-black text-sm md:text-slate-800 focus:bg-white focus:border-slate-300 transition-all" placeholder="Ej. Marinela / Pepsi" />
             </div>
             <div className="space-y-1 md:space-y-2">
               <label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Fecha Factura</label>
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full p-3 md:p-5 bg-slate-50 border-2 border-transparent rounded-lg md:rounded-2xl font-black text-sm md:text-slate-800 focus:bg-white focus:border-slate-300 transition-all" />
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} onKeyDown={handleEnterPress} className="w-full p-3 md:p-5 bg-slate-50 border-2 border-transparent rounded-lg md:rounded-2xl font-black text-sm md:text-slate-800 focus:bg-white focus:border-slate-300 transition-all" />
             </div>
           </div>
         </div>
@@ -222,7 +237,7 @@ const Restock: React.FC = () => {
                     <input type="number" min="1" value={item.quantity} onChange={(e) => {
                       const val = parseInt(e.target.value) || 1;
                       setCart(cart.map(i => i.productId === item.productId ? {...i, quantity: val, totalCost: val * i.unitCost} : i));
-                    }} className="w-12 md:w-20 p-1.5 md:p-3 bg-white rounded md:rounded-xl text-center font-black text-blue-600 focus:outline-none text-xs md:text-base" />
+                    }} onKeyDown={handleEnterPress} className="w-12 md:w-20 p-1.5 md:p-3 bg-white rounded md:rounded-xl text-center font-black text-blue-600 focus:outline-none text-xs md:text-base" />
                   </div>
                   <span className="text-lg md:text-2xl font-black text-slate-900 w-20 md:w-32 text-right tracking-tighter">${item.totalCost.toFixed(2)}</span>
                   <button onClick={() => setCart(cart.filter(i => i.productId !== item.productId))} className="text-slate-300 hover:text-red-500 transition-all"><Trash2 className="md:w-6 md:h-6" size={18} /></button>
