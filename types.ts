@@ -91,6 +91,7 @@ export interface DailyClosing {
   cogs: number;
   debtsPaid: number;
   cashInBox: number;
+  soldProductsJson?: string;
   notes?: string;
 }
 
