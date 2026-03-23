@@ -112,6 +112,7 @@ const DailyClosingView: React.FC = () => {
   }, 0);
 
   const cashInBox = totalSold - debtsPaidWithSales;
+  const flujoCapital = useMemo(() => totalCOGS - debtsPaidWithSales, [totalCOGS, debtsPaidWithSales]);
 
   const handleClosing = async () => {
     try {
@@ -338,10 +339,6 @@ const DailyClosingView: React.FC = () => {
                   <span className="text-slate-400 font-bold text-sm">Deudas Pagadas (Ventas)</span>
                   <span className="text-lg font-bold text-red-400">-${debtsPaidWithSales.toLocaleString()}</span>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-400 font-bold text-sm">Deudas Pagadas (Capital)</span>
-                  <span className="text-lg font-bold text-blue-400">-${debtsPaidWithCapital.toLocaleString()}</span>
-                </div>
               </div>
 
               <div className="bg-blue-600/10 p-6 rounded-[2rem] border border-blue-500/20 shadow-inner">
@@ -358,15 +355,27 @@ const DailyClosingView: React.FC = () => {
               <div className="space-y-4 border-t border-slate-800 pt-6">
                 <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em]">Distribución Proyectada</h4>
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-slate-800/50 p-3 rounded-xl border border-slate-700">
-                    <span className="text-[8px] font-bold text-slate-500 uppercase block">Capital (Sobre 4)</span>
-                    <span className="text-sm font-black text-blue-400">${totalCOGS.toLocaleString()}</span>
-                  </div>
+                  {flujoCapital >= 0 ? (
+                    <div className="bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20">
+                      <span className="text-[8px] font-bold text-emerald-400 uppercase block">Ingreso a Capital (Sobre 4)</span>
+                      <span className="text-sm font-black text-emerald-400">+ ${flujoCapital.toLocaleString()}</span>
+                    </div>
+                  ) : (
+                    <div className="bg-red-500/10 p-3 rounded-xl border border-red-500/20">
+                      <span className="text-[8px] font-bold text-red-400 uppercase block">Retiro de Bóveda (Sobre 4)</span>
+                      <span className="text-sm font-black text-red-400">- ${Math.abs(flujoCapital).toLocaleString()}</span>
+                    </div>
+                  )}
                   <div className="bg-slate-800/50 p-3 rounded-xl border border-slate-700">
                     <span className="text-[8px] font-bold text-slate-500 uppercase block">Utilidad (1/3 c/u)</span>
                     <span className="text-sm font-black text-emerald-400">${(netProfit > 0 ? netProfit / 3 : 0).toLocaleString()}</span>
                   </div>
                 </div>
+                {debtsPaidWithCapital > 0 && (
+                  <p className="text-[10px] text-slate-400 mt-2 italic px-1">
+                    * Recuerda retirar físicamente ${debtsPaidWithCapital.toLocaleString()} del Sobre 4 para pagar al proveedor.
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">
