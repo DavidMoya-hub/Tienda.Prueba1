@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { DollarSign, Tag, Calculator, Save, Check, ArrowRightCircle, CreditCard, Wallet, X, PlusCircle, Minus, Plus, AlertCircle, ChevronDown, ChevronUp, RefreshCcw, Search } from 'lucide-react';
 import { dataService } from '../services/dataService';
 import { OutputTransaction, PurchaseNote, DailyClosing } from '../types';
+import Modal from './Modal';
 
 const DailyClosingView: React.FC = () => {
   const products = dataService.getProducts();
@@ -15,6 +16,12 @@ const DailyClosingView: React.FC = () => {
   const [saved, setSaved] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [notes, setNotes] = useState('');
+  const [modal, setModal] = useState({ 
+    isOpen: false, 
+    type: 'success' as 'success' | 'error' | 'info' | 'warning' | 'confirm', 
+    title: '', 
+    message: '' 
+  });
 
   const handleEnterPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
@@ -161,6 +168,13 @@ const DailyClosingView: React.FC = () => {
         debtsToPay: debtsToPayList
       });
 
+      setModal({
+        isOpen: true,
+        type: 'success',
+        title: '¡Corte Exitoso!',
+        message: 'El corte de caja se guardó correctamente, las deudas se actualizaron y el inventario fue descontado.'
+      });
+
       setSaved(true);
       setSoldItems([]);
       setExcludedDebts(new Set());
@@ -169,7 +183,12 @@ const DailyClosingView: React.FC = () => {
       setTimeout(() => setSaved(false), 3000);
     } catch (error) {
       console.error("Error al realizar el cierre:", error);
-      alert("Error al realizar el cierre. Revisa la consola.");
+      setModal({
+        isOpen: true,
+        type: 'error',
+        title: 'Error',
+        message: 'Hubo un problema al guardar el corte. Revisa la consola.'
+      });
     }
   };
 
@@ -425,6 +444,13 @@ const DailyClosingView: React.FC = () => {
           </div>
         </div>
       </div>
+      <Modal
+        isOpen={modal.isOpen}
+        type={modal.type}
+        title={modal.title}
+        message={modal.message}
+        onClose={() => setModal({ ...modal, isOpen: false })}
+      />
     </div>
   );
 };
