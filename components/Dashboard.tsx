@@ -78,17 +78,36 @@ const Dashboard: React.FC = () => {
     const stats: Record<string, { name: string; qty: number; profit: number }> = {};
     
     closings.forEach(c => {
+      let items: any[] = [];
+      
+      // Lógica de extracción blindada: Busca en todas las posibles propiedades
       try {
-        const items = JSON.parse(c.soldProductsJson || '[]');
-        items.forEach((item: any) => {
-          const id = item.productId || item.name; // Fallback por si acaso
-          if (!stats[id]) stats[id] = { name: item.productName || item.name, qty: 0, profit: 0 };
+        const rawData = (c as any).soldProductsJson || (c as any).detailsJson || (c as any).products || (c as any).soldItems;
+        if (typeof rawData === 'string') {
+          items = JSON.parse(rawData);
+        } else if (Array.isArray(rawData)) {
+          items = rawData;
+        }
+      } catch (e) {
+        console.warn('Error parseando productos de un cierre:', e);
+      }
+
+      // Si logró extraer items, iteramos
+      if (Array.isArray(items)) {
+        items.forEach(item => {
+          // Validación de seguridad para propiedades indefinidas
+          const id = String(item.productId || item.code || item.name || 'desconocido');
+          const name = String(item.productName || item.name || 'Producto Desconocido');
+          const qty = Number(item.quantity || 1);
+          const salePrice = Number(item.salePrice || item.price || 0);
+          const unitCost = Number(item.unitCost || item.costPrice || 0);
           
-          stats[id].qty += Number(item.quantity || 0);
-          const profit = (Number(item.salePrice || 0) - Number(item.unitCost || 0)) * Number(item.quantity || 0);
-          stats[id].profit += profit;
+          if (!stats[id]) stats[id] = { name, qty: 0, profit: 0 };
+          
+          stats[id].qty += qty;
+          stats[id].profit += (salePrice - unitCost) * qty;
         });
-      } catch (e) { /* Ignorar JSON inválidos antiguos */ }
+      }
     });
 
     const arr = Object.values(stats);
