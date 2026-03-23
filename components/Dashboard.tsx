@@ -74,40 +74,26 @@ const Dashboard: React.FC = () => {
   const products = dataService.getProducts();
   const envelopes = dataService.getEnvelopes();
 
-  const stats = useMemo(() => {
-    const productStats: Record<string, { name: string, qty: number, profit: number }> = {};
-
+  const { topVendidos, topGanancias, chartData } = useMemo(() => {
+    const stats: Record<string, { name: string; qty: number; profit: number }> = {};
+    
     closings.forEach(c => {
-      let soldItems = [];
       try {
-        soldItems = JSON.parse(c.soldProductsJson || '[]');
-      } catch (e) {}
-
-      soldItems.forEach((item: any) => {
-        const pid = String(item.productId);
-        if (!productStats[pid]) {
-          productStats[pid] = { name: item.productName || 'Unknown', qty: 0, profit: 0 };
-        }
-        const qty = Number(item.quantity) || 0;
-        const salePrice = Number(item.salePrice) || 0;
-        const unitCost = Number(item.unitCost) || 0;
-        
-        productStats[pid].qty += qty;
-        productStats[pid].profit += (qty * salePrice) - (qty * unitCost);
-      });
+        const items = JSON.parse(c.soldProductsJson || '[]');
+        items.forEach((item: any) => {
+          const id = item.productId || item.name; // Fallback por si acaso
+          if (!stats[id]) stats[id] = { name: item.productName || item.name, qty: 0, profit: 0 };
+          
+          stats[id].qty += Number(item.quantity || 0);
+          const profit = (Number(item.salePrice || 0) - Number(item.unitCost || 0)) * Number(item.quantity || 0);
+          stats[id].profit += profit;
+        });
+      } catch (e) { /* Ignorar JSON inválidos antiguos */ }
     });
 
-    const statsArray = Object.values(productStats);
-    
-    const topVolume = [...statsArray]
-      .sort((a, b) => b.qty - a.qty)
-      .slice(0, 5)
-      .map(p => ({ name: p.name, volume: p.qty }));
-
-    const topProfit = [...statsArray]
-      .sort((a, b) => b.profit - a.profit)
-      .slice(0, 5)
-      .map(p => ({ name: p.name, profit: p.profit }));
+    const arr = Object.values(stats);
+    const topVendidos = [...arr].sort((a, b) => b.qty - a.qty).slice(0, 5);
+    const topGanancias = [...arr].sort((a, b) => b.profit - a.profit).slice(0, 5);
 
     const utilidadReal = closings.reduce((acc, c) => acc + (Number(c.netProfit) || 0), 0);
     const valorInventario = products.reduce((acc, p) => acc + (Number(p.stock) * Number(p.costPrice)), 0);
@@ -120,8 +106,8 @@ const Dashboard: React.FC = () => {
       { name: 'Utilidad Real', value: utilidadReal }
     ];
 
-    return { topVolume, topProfit, utilidadReal, valorInventario, dineroBoveda, capitalReal, chartData };
-  }, [tick, closings, products, envelopes]);
+    return { topVendidos, topGanancias, chartData };
+  }, [closings, products, envelopes]);
 
   if (loading) return (
     <div className="flex items-center justify-center h-96">
@@ -217,7 +203,7 @@ const Dashboard: React.FC = () => {
             </h3>
             <div className="h-64 md:h-80 w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={stats.chartData}>
+                <BarChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontWeight: 700, fontSize: 10}} />
                   <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontWeight: 700, fontSize: 10}} />
@@ -226,7 +212,7 @@ const Dashboard: React.FC = () => {
                     contentStyle={{borderRadius: '1rem md:1.5rem', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '0.75rem md:1rem'}}
                   />
                   <Bar dataKey="value" radius={[8, 8, 0, 0]}>
-                    {stats.chartData.map((entry: any, index: number) => (
+                    {chartData.map((entry: any, index: number) => (
                       <Cell key={`cell-${index}`} fill={index === 0 ? '#dc2626' : '#2563eb'} />
                     ))}
                   </Bar>
@@ -241,13 +227,15 @@ const Dashboard: React.FC = () => {
                 <ShoppingBag className="text-blue-600 md:w-5 md:h-5" size={18} />
                 <span>Más Vendidos (Volumen)</span>
               </h3>
-              <div className="space-y-3 md:space-y-4">
-                {stats.topVolume.map((item: any, i: number) => (
-                  <div key={i} className="flex items-center justify-between p-3 md:p-4 bg-slate-50 rounded-xl md:rounded-2xl border border-slate-100">
-                    <span className="font-bold text-slate-700 text-xs md:text-sm">{item.name}</span>
-                    <span className="bg-blue-100 text-blue-700 px-2 md:px-3 py-0.5 md:py-1 rounded-lg font-black text-[10px] md:text-xs">{item.volume} units</span>
-                  </div>
-                ))}
+              <div className="space-y-3 mt-4">
+                {topVendidos.length === 0 ? <p className="text-sm text-gray-400 text-center">No hay datos suficientes</p> : 
+                  topVendidos.map((item, i) => (
+                    <div key={i} className="flex justify-between items-center p-3 bg-slate-50 hover:bg-slate-100 rounded-xl transition-colors">
+                      <span className="text-sm font-bold text-slate-700">{item.name}</span>
+                      <span className="text-xs font-black text-blue-600 bg-blue-100 px-2 py-1 rounded-md">{item.qty} units</span>
+                    </div>
+                  ))
+                }
               </div>
             </div>
             <div className="bg-white p-5 md:p-8 rounded-2xl md:rounded-[2.5rem] border border-blue-50 shadow-xl shadow-slate-200/50">
@@ -255,13 +243,15 @@ const Dashboard: React.FC = () => {
                 <DollarSign className="text-red-600 md:w-5 md:h-5" size={18} />
                 <span>Mayor Ganancia ($)</span>
               </h3>
-              <div className="space-y-3 md:space-y-4">
-                {stats.topProfit.map((item: any, i: number) => (
-                  <div key={i} className="flex items-center justify-between p-3 md:p-4 bg-red-50 rounded-xl md:rounded-2xl border border-red-100">
-                    <span className="font-bold text-slate-700 text-xs md:text-sm">{item.name}</span>
-                    <span className="bg-red-100 text-red-700 px-2 md:px-3 py-0.5 md:py-1 rounded-lg font-black text-[10px] md:text-xs">${item.profit.toFixed(0)}</span>
-                  </div>
-                ))}
+              <div className="space-y-3 mt-4">
+                {topGanancias.length === 0 ? <p className="text-sm text-gray-400 text-center">No hay datos suficientes</p> : 
+                  topGanancias.map((item, i) => (
+                    <div key={i} className="flex justify-between items-center p-3 bg-red-50 hover:bg-red-100 rounded-xl transition-colors">
+                      <span className="text-sm font-bold text-slate-700">{item.name}</span>
+                      <span className="text-xs font-black text-red-600 bg-red-100 px-2 py-1 rounded-md">${item.profit.toLocaleString()}</span>
+                    </div>
+                  ))
+                }
               </div>
             </div>
           </div>
@@ -276,13 +266,13 @@ const Dashboard: React.FC = () => {
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={stats.chartData}
+                    data={chartData}
                     innerRadius={50}
                     outerRadius={70}
                     paddingAngle={8}
                     dataKey="value"
                   >
-                    {stats.chartData.map((entry: any, index: number) => (
+                    {chartData.map((entry: any, index: number) => (
                       <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} stroke="none" />
                     ))}
                   </Pie>
@@ -294,13 +284,13 @@ const Dashboard: React.FC = () => {
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <div className="text-center">
                   <span className="text-[8px] md:text-[10px] font-black uppercase text-slate-500 tracking-widest block">Total</span>
-                  <span className="text-lg md:text-2xl font-black">${(stats.chartData.reduce((a:any, b:any) => a + b.value, 0)).toLocaleString()}</span>
+                  <span className="text-lg md:text-2xl font-black">${(chartData.reduce((a:any, b:any) => a + b.value, 0)).toLocaleString()}</span>
                 </div>
               </div>
             </div>
 
             <div className="mt-6 md:mt-8 space-y-3 md:space-y-4">
-               {stats.chartData.map((entry: any, index: number) => (
+               {chartData.map((entry: any, index: number) => (
                  <div key={index} className="flex items-center justify-between p-3 md:p-4 bg-slate-800/50 rounded-xl md:rounded-2xl border border-slate-700/50">
                    <div className="flex items-center space-x-3">
                      <div className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full" style={{backgroundColor: PIE_COLORS[index]}}></div>
