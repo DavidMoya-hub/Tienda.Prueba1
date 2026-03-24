@@ -424,15 +424,13 @@ export const dataService = {
         return p;
       });
 
-      // 2. Actualizar deudas localmente
+      // 2. Actualizar deudas localmente y calcular total pagado con capital para ajuste de Sobre 4
+      let totalDebtsFromCapital = 0;
       this._purchaseNotes = this._purchaseNotes.map(n => {
         const debt = data.debtsToPay.find(d => d.id === n.id);
         if (debt) {
-          // Si se paga con capital, descontar del sobre 4
           if (debt.method === 'Capital') {
-            this._envelopes = this._envelopes.map(e => 
-              e.id === 'ENV4' ? { ...e, balance: (Number(e.balance) || 0) - (Number(n.totalAmount) || 0) } : e
-            );
+            totalDebtsFromCapital += (Number(n.totalAmount) || 0);
           }
           return { ...n, status: 'Paid', paymentSource: debt.method };
         }
@@ -461,8 +459,11 @@ export const dataService = {
       const profit = Number(data.closing.netProfit) || 0;
       const cogs = Number(data.closing.cogs) || 0;
       
+      // Flujo neto para Sobre 4: Costo de mercancía - Deudas pagadas con Capital
+      const netCapitalFlow = cogs - totalDebtsFromCapital;
+
       this._envelopes = this._envelopes.map(e => {
-        if (e.id === 'ENV4') return { ...e, balance: (Number(e.balance) || 0) + cogs };
+        if (e.id === 'ENV4') return { ...e, balance: (Number(e.balance) || 0) + netCapitalFlow };
         if (profit > 0 && ['ENV1', 'ENV2', 'ENV3'].includes(e.id)) {
           return { ...e, balance: (Number(e.balance) || 0) + (profit / 3) };
         }

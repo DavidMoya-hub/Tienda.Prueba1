@@ -788,10 +788,37 @@ function saveMasterClosing(data) {
   });
   outSheet.appendRow(outputRow);
   
-  // 3. Procesar deudas
+  // 3. Procesar deudas y calcular total pagado con capital
   const paidDebtIds = debtsToPay.map(d => d.id);
+  const noteSheet = getSheet("PurchaseNotes");
+  const noteData = noteSheet.getDataRange().getValues();
+  const noteHeaders = noteData[0];
+  const noteIdIdx = 0;
+  const noteAmountIdx = noteHeaders.indexOf("totalAmount");
+  const noteStatusIdx = noteHeaders.indexOf("status");
+  const noteSourceIdx = noteHeaders.indexOf("paymentSource");
+
+  let totalDebtsFromCapital = 0;
+
   debtsToPay.forEach(debt => {
-    updateNoteStatus(debt.id, 'Paid', debt.method);
+    const searchId = debt.id.toString().trim().toUpperCase();
+    for (let i = 1; i < noteData.length; i++) {
+      if (noteData[i][noteIdIdx].toString().trim().toUpperCase() === searchId) {
+        const amount = parseAmount(noteData[i][noteAmountIdx]);
+        const oldStatus = noteData[i][noteStatusIdx];
+        
+        if (oldStatus !== 'Paid' && debt.method === 'Capital') {
+          totalDebtsFromCapital += amount;
+        }
+        
+        // Actualizar estado de la nota sin disparar updateEnvelopeBalance individualmente
+        noteSheet.getRange(i + 1, noteStatusIdx + 1).setValue('Paid');
+        if (noteSourceIdx > -1) {
+          noteSheet.getRange(i + 1, noteSourceIdx + 1).setValue(debt.method);
+        }
+        break;
+      }
+    }
   });
   
   // 4. Guardar el cierre maestro
@@ -802,7 +829,9 @@ function saveMasterClosing(data) {
   const profit = parseAmount(closing.netProfit);
   const cogs = parseAmount(closing.cogs);
   
-  updateEnvelopeBalance("ENV4", cogs);
+  // Flujo neto para Sobre 4: Costo de mercancía - Deudas pagadas con Capital
+  const netCapitalFlow = cogs - totalDebtsFromCapital;
+  updateEnvelopeBalance("ENV4", netCapitalFlow);
   if (profit > 0) {
     const part = profit / 3;
     ["ENV1", "ENV2", "ENV3"].forEach(id => updateEnvelopeBalance(id, part));
