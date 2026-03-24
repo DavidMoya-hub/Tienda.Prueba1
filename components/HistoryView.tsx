@@ -81,6 +81,29 @@ const HistoryView: React.FC = () => {
     }
   };
 
+  const extractProducts = (item: any): any[] => {
+    if (!item) return [];
+    // Lista de todas las propiedades donde el backend pudo haber inyectado el JSON
+    const possibleFields = [
+      item.soldProductsJson, item.detailsJson, item.products, 
+      item.productId, item.productName, item.notes
+    ];
+
+    for (const field of possibleFields) {
+      if (typeof field === 'string' && field.trim().startsWith('[') && field.trim().endsWith(']')) {
+        try {
+          const parsed = JSON.parse(field);
+          if (Array.isArray(parsed) && parsed.length > 0 && (parsed[0].productId || parsed[0].name || parsed[0].productName)) {
+            return parsed; // JSON válido encontrado
+          }
+        } catch (e) { /* ignorar y seguir buscando */ }
+      } else if (Array.isArray(field) && field.length > 0) {
+        return field;
+      }
+    }
+    return [];
+  };
+
   const handleOpenDetails = (note: PurchaseNote) => {
     setSelectedNote(note);
     setEditedDetails(parseDetails(note.detailsJson));
@@ -900,45 +923,44 @@ const HistoryView: React.FC = () => {
                     </thead>
                     <tbody className="divide-y divide-slate-50">
                       {(() => {
-                        let parsed = [];
-                        try {
-                          parsed = JSON.parse(selectedDetail.soldProductsJson || selectedDetail.detailsJson || '[]');
-                        } catch (e) {
-                          parsed = [];
-                        }
-
-                        // Fallback para registros antiguos de Salida
-                        if (parsed.length === 0 && selectedDetail.productName && selectedDetail.totalSold === undefined) {
-                          parsed = [{
-                            productName: selectedDetail.productName,
-                            quantity: selectedDetail.quantity,
-                            salePrice: selectedDetail.totalSale / (selectedDetail.quantity || 1),
-                            totalSale: selectedDetail.totalSale
-                          }];
-                        }
-
-                        return parsed.map((item: any, idx: number) => (
-                          <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
-                            <td className="px-4 py-3 font-bold text-slate-800">{item.productName}</td>
-                            <td className="px-4 py-3 text-center font-black text-blue-600">
-                              <span className="bg-blue-50 px-2 py-0.5 rounded-md">{item.quantity}</span>
-                            </td>
-                            <td className="px-4 py-3 text-right text-slate-500">
-                              ${Number(item.salePrice || item.unitCost || 0).toFixed(2)}
-                            </td>
-                            <td className="px-4 py-3 text-right font-black text-slate-900">
-                              ${Number(item.totalSale || item.totalCost || 0).toFixed(2)}
-                            </td>
-                          </tr>
-                        ));
-                      })()}
-                      {(() => {
-                        let parsed = [];
-                        try {
-                          parsed = JSON.parse(selectedDetail.soldProductsJson || selectedDetail.detailsJson || '[]');
-                        } catch (e) { parsed = []; }
+                        const products = extractProducts(selectedDetail);
                         
-                        if (parsed.length === 0 && (!selectedDetail.productName || selectedDetail.totalSold !== undefined)) {
+                        if (products.length > 0) {
+                          return products.map((prod: any, idx: number) => (
+                            <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                              <td className="px-4 py-3 font-bold text-slate-800">{prod.productName || prod.name || 'Producto'}</td>
+                              <td className="px-4 py-3 text-center font-black text-blue-600">
+                                <span className="bg-blue-50 px-2 py-0.5 rounded-md">{prod.quantity || 1}</span>
+                              </td>
+                              <td className="px-4 py-3 text-right text-slate-500">
+                                ${Number(prod.salePrice || prod.unitCost || prod.price || 0).toLocaleString()}
+                              </td>
+                              <td className="px-4 py-3 text-right font-black text-slate-900">
+                                ${(Number(prod.quantity || 1) * Number(prod.salePrice || prod.unitCost || prod.price || 0)).toLocaleString()}
+                              </td>
+                            </tr>
+                          ));
+                        }
+
+                        // Si no hay productos extraídos
+                        if (selectedDetail.totalSold === undefined) {
+                          // Es una salida normal (Green)
+                          return (
+                            <tr className="hover:bg-slate-50/50 transition-colors">
+                              <td className="px-4 py-3 font-bold text-slate-800">{selectedDetail.productName || 'Desconocido'}</td>
+                              <td className="px-4 py-3 text-center font-black text-blue-600">
+                                <span className="bg-blue-50 px-2 py-0.5 rounded-md">{selectedDetail.quantity || 0}</span>
+                              </td>
+                              <td className="px-4 py-3 text-right text-slate-500">
+                                ${Number(selectedDetail.totalSale || 0).toLocaleString()}
+                              </td>
+                              <td className="px-4 py-3 text-right font-black text-slate-900">
+                                ${Number(selectedDetail.totalSale || 0).toLocaleString()}
+                              </td>
+                            </tr>
+                          );
+                        } else {
+                          // Es un cierre (Red)
                           return (
                             <tr>
                               <td colSpan={4} className="px-4 py-8 text-center text-slate-400 font-bold italic">
@@ -947,7 +969,6 @@ const HistoryView: React.FC = () => {
                             </tr>
                           );
                         }
-                        return null;
                       })()}
                     </tbody>
                   </table>
