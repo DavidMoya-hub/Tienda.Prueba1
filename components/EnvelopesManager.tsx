@@ -198,7 +198,7 @@ const EnvelopesManager: React.FC = () => {
               </div>
               <div>
                 <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] mb-2">{env.name.toUpperCase()}</h3>
-                <p className="text-4xl md:text-5xl font-black text-blue-900 tracking-tighter">${Number(env.balance || 0).toLocaleString()}</p>
+                <p className="text-3xl xl:text-4xl font-black text-blue-900 truncate block w-full">{Number(env.balance || 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}</p>
                 <p className="text-[9px] md:text-[10px] text-slate-400 mt-2 font-bold italic">{env.description}</p>
               </div>
               <div className="bg-slate-50 p-4 md:p-5 rounded-2xl md:rounded-[1.8rem] border border-slate-100 space-y-2">
@@ -234,7 +234,7 @@ const EnvelopesManager: React.FC = () => {
                 <tr key={item.id} className="hover:bg-blue-50/30 transition-colors">
                   <td className="px-6 md:px-10 py-4 md:py-6 font-black text-slate-800">{formatDate(item.endDate)}</td>
                   <td className="px-6 md:px-10 py-4 md:py-6"><span className="bg-blue-50 text-blue-600 px-3 md:px-4 py-1 md:py-1.5 rounded-lg md:rounded-xl font-black text-[8px] md:text-[10px] uppercase tracking-widest border border-blue-100">{item.envelopeName}</span></td>
-                  <td className="px-6 md:px-10 py-4 md:py-6 text-center"><span className="text-lg md:text-2xl font-black text-red-600 tracking-tighter">${Number(item.amount).toLocaleString()}</span></td>
+                  <td className="px-6 md:px-10 py-4 md:py-6 text-center"><span className="text-lg md:text-2xl font-black text-red-600 tracking-tighter">{Number(item.amount).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}</span></td>
                   <td className="px-6 md:px-10 py-4 md:py-6 font-black text-slate-700">{item.durationText}</td>
                   <td className="px-6 md:px-10 py-4 md:py-6 text-right space-x-2">
                      <button onClick={() => openEditWithdrawal(item)} className="text-slate-300 hover:text-blue-600 p-2"><Edit3 size={16} /></button>
@@ -249,7 +249,7 @@ const EnvelopesManager: React.FC = () => {
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 bg-blue-950/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
           <div className="bg-white w-full max-w-lg rounded-3xl md:rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
             <div className="bg-blue-900 p-6 md:p-8 flex justify-between items-center text-white">
               <h3 className="text-lg md:text-xl font-black tracking-tight">{editingEnv ? 'Editar Sobre' : 'Crear Sobre'}</h3>
@@ -269,7 +269,7 @@ const EnvelopesManager: React.FC = () => {
                   required 
                   value={formData.balance} 
                   onChange={(e) => setFormData({...formData, balance: e.target.value})} 
-                  className="w-full p-4 md:p-5 border-2 border-transparent rounded-2xl focus:outline-none transition-all font-black text-xl md:text-2xl bg-blue-50/50 text-blue-600 focus:bg-white focus:border-blue-500" 
+                  className="w-full bg-slate-50 border border-slate-100 rounded-xl p-4 text-xl font-black text-blue-600 focus:ring-2 focus:ring-blue-500 outline-none" 
                 />
               </div>
               <div className="space-y-3 md:space-y-4">
