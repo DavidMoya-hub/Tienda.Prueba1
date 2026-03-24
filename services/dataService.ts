@@ -480,6 +480,23 @@ export const dataService = {
   async savePriceHistory(h: PriceHistory) { await runGas('savePriceHistory', h); await this.fetchAll(); },
   async deletePriceHistory(id: string) { await runGas('deletePriceHistory', id); await this.fetchAll(); },
   async saveEnvelope(e: Envelope) { await runGas('saveEnvelope', e); await this.fetchAll(); },
+  async updateEnvelope(envelope: Partial<Envelope> & { id: string }) {
+    const res = await runGas('updateEnvelope', envelope);
+    if (res && res.success) {
+      this._envelopes = this._envelopes.map(e => {
+        if (e.id === envelope.id) {
+          return {
+            ...e,
+            balance: envelope.balance !== undefined ? Number(envelope.balance) : e.balance,
+            percentage: envelope.percentage !== undefined ? Number(envelope.percentage) : e.percentage
+          };
+        }
+        return e;
+      });
+      this._notify();
+    }
+    return res;
+  },
   async withdrawEnvelope(w: EnvelopeWithdrawal) { await runGas('withdrawEnvelope', w); await this.fetchAll(); },
   async deleteWithdrawal(id: string) { await runGas('deleteWithdrawal', id); await this.fetchAll(); },
   async updateWithdrawal(w: EnvelopeWithdrawal) { await runGas('updateWithdrawal', w); await this.fetchAll(); },

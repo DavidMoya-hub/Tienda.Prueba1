@@ -51,6 +51,7 @@ function doPost(e) {
 
       // --- SOBRES ---
       case 'saveEnvelope': result = saveEnvelope(data); break;
+      case 'updateEnvelope': result = updateEnvelope(data); break;
       case 'withdrawEnvelope': result = withdrawEnvelope(data); break;
       case 'updateWithdrawal': result = updateWithdrawal(data); break;
       case 'deleteWithdrawal': result = deleteWithdrawal(extractId(data)); break;
@@ -148,6 +149,48 @@ function saveEnvelope(env) {
     });
     sheet.appendRow(rowData);
     return {success: true};
+  }
+}
+
+/**
+ * Actualiza datos de un sobre (balance, porcentaje, etc.)
+ */
+function updateEnvelope(data) {
+  try {
+    const sheet = getSheet('Envelopes');
+    const dataRange = sheet.getDataRange();
+    const values = dataRange.getValues();
+    const headers = values[0];
+
+    const idIndex = headers.indexOf('id');
+    const nameIndex = headers.indexOf('name');
+    const balanceIndex = headers.indexOf('balance');
+    const descIndex = headers.indexOf('description');
+    const percentIndex = headers.indexOf('percentage');
+
+    const searchId = data.id.toString().trim().toUpperCase();
+
+    for (let i = 1; i < values.length; i++) {
+      if (values[i][idIndex].toString().trim().toUpperCase() === searchId) {
+        // Actualizar solo los campos que vienen en el payload
+        if (data.name !== undefined && nameIndex !== -1) {
+          sheet.getRange(i + 1, nameIndex + 1).setValue(data.name);
+        }
+        if (data.balance !== undefined && balanceIndex !== -1) {
+          sheet.getRange(i + 1, balanceIndex + 1).setValue(parseAmount(data.balance));
+        }
+        if (data.description !== undefined && descIndex !== -1) {
+          sheet.getRange(i + 1, descIndex + 1).setValue(data.description);
+        }
+        if (data.percentage !== undefined && percentIndex !== -1) {
+          sheet.getRange(i + 1, percentIndex + 1).setValue(parseAmount(data.percentage));
+        }
+        return { success: true, message: 'Sobre actualizado' };
+      }
+    }
+    throw new Error("Sobre no encontrado: " + data.id);
+  } catch (e) {
+    return { error: e.toString() };
   }
 }
 

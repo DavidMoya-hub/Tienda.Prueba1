@@ -80,7 +80,15 @@ const EnvelopesManager: React.FC = () => {
         ...formData,
         balance: parseFloat(formData.balance as string) || 0
       };
-      await dataService.saveEnvelope(dataToSave as Envelope);
+      
+      if (editingEnv) {
+        // Si estamos editando, usamos updateEnvelope para asegurar que el balance y otros datos se persistan
+        await dataService.updateEnvelope(dataToSave);
+      } else {
+        // Si es nuevo, usamos saveEnvelope
+        await dataService.saveEnvelope(dataToSave as Envelope);
+      }
+      
       await refreshData();
       setShowModal(false);
     } catch (err) {

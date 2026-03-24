@@ -22,6 +22,7 @@ export interface Envelope {
   balance: number;
   description: string;
   lastResetDate: string; 
+  percentage?: number;
 }
 
 export interface EnvelopeWithdrawal {
