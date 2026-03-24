@@ -923,12 +923,27 @@ const HistoryView: React.FC = () => {
                     </thead>
                     <tbody className="divide-y divide-slate-50">
                       {(() => {
-                        const products = extractProducts(selectedDetail);
-                        
-                        if (products.length > 0) {
-                          return products.map((prod: any, idx: number) => (
-                            <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
-                              <td className="px-4 py-3 font-bold text-slate-800">{prod.productName || prod.name || 'Producto'}</td>
+                        let outputProducts = extractProducts(selectedDetail);
+
+                        // Intento 2: Si es un puntero de Cierre Maestro, buscar la lista real en los Cierres
+                        const isMasterClosingPointer = selectedDetail?.productName === 'Cierre Maestro' || selectedDetail?.notes?.includes('Cierre Maestro');
+
+                        if (outputProducts.length === 0 && isMasterClosingPointer) {
+                          // Extraer el ID del cierre de las notas (ej. "Cierre Maestro: 12345") o coincidir por fecha exacta
+                          const closingIdMatch = selectedDetail?.notes?.match(/Cierre Maestro:\s*([a-zA-Z0-9_-]+)/);
+                          const linkedId = closingIdMatch ? closingIdMatch[1] : null;
+                          
+                          const linkedClosing = closings.find(c => c.id === linkedId || c.date === selectedDetail.date);
+                          
+                          if (linkedClosing) {
+                            outputProducts = extractProducts(linkedClosing); // Usamos el JSON del Cierre Padre
+                          }
+                        }
+
+                        if (outputProducts.length > 0) {
+                          return outputProducts.map((prod: any, idx: number) => (
+                            <tr key={idx} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
+                              <td className="px-4 py-3 font-bold text-slate-700">{prod.productName || prod.name || 'Producto'}</td>
                               <td className="px-4 py-3 text-center font-black text-blue-600">
                                 <span className="bg-blue-50 px-2 py-0.5 rounded-md">{prod.quantity || 1}</span>
                               </td>
@@ -942,17 +957,16 @@ const HistoryView: React.FC = () => {
                           ));
                         }
 
-                        // Si no hay productos extraídos
+                        // Si no hay productos extraídos (salida manual o sin vínculo)
                         if (selectedDetail.totalSold === undefined) {
-                          // Es una salida normal (Green)
                           return (
                             <tr className="hover:bg-slate-50/50 transition-colors">
-                              <td className="px-4 py-3 font-bold text-slate-800">{selectedDetail.productName || 'Desconocido'}</td>
+                              <td className="px-4 py-3 font-bold text-slate-700">{selectedDetail.productName || 'Desconocido'}</td>
                               <td className="px-4 py-3 text-center font-black text-blue-600">
                                 <span className="bg-blue-50 px-2 py-0.5 rounded-md">{selectedDetail.quantity || 0}</span>
                               </td>
                               <td className="px-4 py-3 text-right text-slate-500">
-                                ${Number(selectedDetail.totalSale || 0).toLocaleString()}
+                                ${Number(selectedDetail.salePrice || 0).toLocaleString()}
                               </td>
                               <td className="px-4 py-3 text-right font-black text-slate-900">
                                 ${Number(selectedDetail.totalSale || 0).toLocaleString()}
@@ -960,7 +974,6 @@ const HistoryView: React.FC = () => {
                             </tr>
                           );
                         } else {
-                          // Es un cierre (Red)
                           return (
                             <tr>
                               <td colSpan={4} className="px-4 py-8 text-center text-slate-400 font-bold italic">

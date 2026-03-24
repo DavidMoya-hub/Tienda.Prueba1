@@ -1,6 +1,6 @@
 import { Product, InputTransaction, OutputTransaction, DailyClosing, PriceHistory, PurchaseNote, Envelope, EnvelopeWithdrawal } from "../types";
 
-const API_URL = "https://script.google.com/macros/s/AKfycbzo-PQjPHe2ZsNbcqM1NAengWvqzE4qE0FW4sauhvcZopHMjEDAVpw6I6_ve8qzZtrZig/exec";
+const API_URL = "/api/exec";
 
 declare var google: any;
 
@@ -15,41 +15,24 @@ const runGas = async (action: string, data: any = null): Promise<any> => {
     });
   }
 
-  // Entorno Vercel / Local (Fetch API Directo)
+  // Entorno Local (Fetch API al Servidor Express)
   try {
     const response = await fetch(API_URL, {
       method: 'POST',
-      redirect: 'follow',
-      mode: 'cors',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action, data })
     });
 
-    // Verificación de estado 200 o 302
-    if (!response.ok && response.status !== 302) {
+    if (!response.ok) {
       throw new Error(`Error de Servidor: ${response.status}`);
     }
 
-    const text = await response.text();
+    const json = await response.json();
+    if (json && json.error) throw new Error(json.error);
     
-    if (text.includes('<html') || text.includes('<!DOCTYPE html>')) {
-      throw new Error("Error de Servidor: El servidor devolvió una página de error (HTML). Verifica la URL del script.");
-    }
-
-    try {
-      const json = JSON.parse(text);
-      if (json && json.error) throw new Error(json.error);
-      
-      // Devolvemos el JSON tal cual. Si es un array (para GET), se mantiene como array.
-      // Si es un objeto (para POST), se mantiene como objeto.
-      return json;
-    } catch (e) {
-      // Si no es JSON pero el status es OK, devolvemos un objeto de éxito
-      if (response.ok || response.status === 302) {
-        return { success: true };
-      }
-      throw new Error("Error de Servidor: La respuesta no es un JSON válido. Respuesta recibida: " + text.substring(0, 100));
-    }
+    // El servidor local devuelve { success: true, data: [...] } o { success: true }
+    // Para mantener compatibilidad con el código que espera directamente el array o el objeto:
+    return json.data !== undefined ? json.data : json;
   } catch (error) {
     console.error(`Error en fetch directo (${action}):`, error);
     throw error;
@@ -82,16 +65,13 @@ export const dataService = {
 
   async fetchAll() {
     try {
-      const [products, envelopes, envHistory, purchaseNotes, inputs, outputs, closings, priceHistory] = await Promise.all([
-        runGas('getProducts'),
-        runGas('getEnvelopes'),
-        runGas('getEnvelopeHistory'),
-        runGas('getPurchaseNotes'),
-        runGas('getInputs'),
-        runGas('getOutputs'),
-        runGas('getClosings'),
-        runGas('getPriceHistory'),
-      ]);
+      const res = await runGas('getData');
+      
+      if (!res || typeof res !== 'object') {
+        throw new Error("Respuesta inválida de getData");
+      }
+
+      const { products, envelopes, envelopeHistory, purchaseNotes, inputs, outputs, closings, priceHistory } = res;
 
       this._products = (Array.isArray(products) ? products : []).map((p: any) => ({
         ...p,
@@ -101,7 +81,7 @@ export const dataService = {
         stock: Number(p.stock || 0)
       }));
       this._envelopes = Array.isArray(envelopes) ? envelopes : [];
-      this._envelopeHistory = Array.isArray(envHistory) ? envHistory : [];
+      this._envelopeHistory = Array.isArray(envelopeHistory) ? envelopeHistory : [];
       this._purchaseNotes = (Array.isArray(purchaseNotes) ? purchaseNotes : []).map((n: any) => ({
         ...n,
         totalAmount: Number(n.totalAmount || 0),

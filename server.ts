@@ -260,6 +260,116 @@ async function startServer() {
           break;
         }
 
+        case 'updateClosing': {
+          const index = db.Closings.findIndex((c: any) => c.id === data.id);
+          if (index > -1) {
+            db.Closings[index] = { ...db.Closings[index], ...data.newData };
+            writeDb(db);
+          }
+          break;
+        }
+
+        case 'deleteClosing': {
+          db.Closings = db.Closings.filter((c: any) => c.id !== data);
+          writeDb(db);
+          break;
+        }
+
+        case 'saveInput': {
+          if (!data.id) data.id = "INP-" + Math.random().toString(36).substr(2, 9);
+          const index = db.Inputs.findIndex((i: any) => i.id === data.id);
+          if (index > -1) db.Inputs[index] = data;
+          else db.Inputs.push(data);
+          writeDb(db);
+          break;
+        }
+
+        case 'deleteInput': {
+          db.Inputs = db.Inputs.filter((i: any) => i.id !== data);
+          writeDb(db);
+          break;
+        }
+
+        case 'deleteOutput': {
+          db.Outputs = db.Outputs.filter((o: any) => o.id !== data);
+          writeDb(db);
+          break;
+        }
+
+        case 'savePriceHistory': {
+          if (!data.id) data.id = "PRICE-" + Math.random().toString(36).substr(2, 9);
+          db.PriceHistory.push(data);
+          writeDb(db);
+          break;
+        }
+
+        case 'deletePriceHistory': {
+          db.PriceHistory = db.PriceHistory.filter((h: any) => h.id !== data);
+          writeDb(db);
+          break;
+        }
+
+        case 'deletePurchaseNote': {
+          db.PurchaseNotes = db.PurchaseNotes.filter((n: any) => n.id !== data);
+          writeDb(db);
+          break;
+        }
+
+        case 'updatePurchaseNoteDetails': {
+          const note = db.PurchaseNotes.find((n: any) => n.id === data.id);
+          if (note) {
+            note.totalAmount = data.totalAmount;
+            note.detailsJson = data.detailsJson;
+            writeDb(db);
+          }
+          break;
+        }
+
+        case 'saveMasterClosing': {
+          const { closing, products, debtsToPay } = data;
+          db.Closings.push(closing);
+          
+          // Registrar salida maestra
+          db.Outputs.push({
+            id: "OUT-" + Math.random().toString(36).substr(2, 9),
+            productId: "MASTER",
+            productName: "Cierre Maestro",
+            quantity: 0,
+            salePrice: 0,
+            totalSale: closing.totalSold,
+            date: closing.date,
+            shift: "General",
+            notes: "Cierre Maestro: " + closing.id,
+            type: "exit",
+            soldProductsJson: JSON.stringify(products)
+          });
+
+          // Actualizar deudas
+          debtsToPay.forEach((debt: any) => {
+            const note = db.PurchaseNotes.find((n: any) => n.id === debt.id);
+            if (note) {
+              note.status = 'Paid';
+              note.paymentSource = debt.method;
+            }
+          });
+
+          writeDb(db);
+          break;
+        }
+
+        case 'deleteItemFromPurchaseNote': {
+          const { noteId, productId } = data;
+          const note = db.PurchaseNotes.find((n: any) => n.id === noteId);
+          if (note) {
+            const details = JSON.parse(note.detailsJson || '[]');
+            const filtered = details.filter((d: any) => String(d.productId) !== String(productId));
+            note.detailsJson = JSON.stringify(filtered);
+            note.totalAmount = filtered.reduce((acc: number, curr: any) => acc + (Number(curr.totalCost) || 0), 0);
+            writeDb(db);
+          }
+          break;
+        }
+
         case 'updateNoteStatus': {
           const note = db.PurchaseNotes.find((n: any) => n.id === data.id);
           if (note) {
