@@ -1,6 +1,6 @@
 import { Product, InputTransaction, OutputTransaction, DailyClosing, PriceHistory, PurchaseNote, Envelope, EnvelopeWithdrawal } from "../types";
 
-const API_URL = "https://script.google.com/macros/s/AKfycbxFKCquenWyCfZ3qLqsyMB_KpGjjithG74mSZKiVwrLmafq8NT4UI0d6ZFXUki-CHBP4Q/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbzRaaRAOYsDQyBi8OSjN-HRs4963tTr95Te0tm1sBmXnFJ9ae4oacyJZUIFTMGBFijgQw/exec";
 
 declare var google: any;
 
