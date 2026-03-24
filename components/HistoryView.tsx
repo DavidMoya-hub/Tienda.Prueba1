@@ -929,55 +929,50 @@ const HistoryView: React.FC = () => {
                     </thead>
                     <tbody className="divide-y divide-slate-50">
                       {(() => {
+                        // Extraer catálogo maestro para cruzar nombres
+                        const allProducts = dataService.getProducts();
                         let outputProducts: any[] = [];
 
                         if (selectedDetail) {
-                          // 1. Intentar buscar en el propio ítem primero (Extracción agresiva)
                           try {
-                            const raw = selectedDetail.soldProductsJson || selectedDetail.detailsJson || selectedDetail.products || selectedDetail.notes;
-                            if (typeof raw === 'string' && raw.includes('[')) {
-                              const startIdx = raw.indexOf('[');
-                              const endIdx = raw.lastIndexOf(']') + 1;
-                              outputProducts = JSON.parse(raw.substring(startIdx, endIdx));
-                            } else if (Array.isArray(raw)) {
-                              outputProducts = raw;
+                            // 1. Buscar el JSON en la clave vacía [""] o las de respaldo
+                            const rawData = selectedDetail[""] || selectedDetail.soldProductsJson || selectedDetail.detailsJson || '[]';
+                            
+                            // 2. Si es un JSON válido que contiene el productId
+                            if (typeof rawData === 'string' && rawData.includes('productId')) {
+                              const parsed = JSON.parse(rawData);
+                              
+                              // 3. Enriquecer el array mapeando el ID con el nombre real
+                              outputProducts = parsed.map((item: any) => {
+                                const productDef = allProducts.find(p => p.id === item.productId);
+                                const qty = Number(item.quantity || 1);
+                                const total = Number(item.totalSale || item.totalCost || 0);
+                                
+                                return {
+                                  productName: productDef ? productDef.name : 'Producto Eliminado/Desconocido',
+                                  quantity: qty,
+                                  totalSale: total,
+                                  unitPrice: total / qty // Calculamos el precio unitario matemáticamente
+                                };
+                              });
                             }
-                          } catch(e) {}
-
-                          // 2. Si está vacío y es un Cierre, cruzar con la tabla de Closings por FECHA exacta o ID
-                          const isMasterClosing = selectedDetail.productName === 'Cierre Maestro' || String(selectedDetail.notes).includes('Cierre Maestro');
-                          
-                          if (outputProducts.length === 0 && isMasterClosing) {
-                             const allClosings = dataService.getClosings(); 
-
-                             // Buscar el cierre que ocurrió en el mismo segundo o que coincida en el ID
-                             const matchingClosing = allClosings.find(c => 
-                               c.date === selectedDetail.date || 
-                               String(selectedDetail.notes).includes(String(c.id))
-                             );
-
-                             if (matchingClosing) {
-                               console.log("¡CIERRE ENCONTRADO!", matchingClosing);
-                               try {
-                                 const rawClosing = matchingClosing.soldProductsJson || (matchingClosing as any).detailsJson || '[]';
-                                 outputProducts = typeof rawClosing === 'string' ? JSON.parse(rawClosing) : rawClosing;
-                               } catch(e) {}
-                             }
+                          } catch (error) {
+                            console.warn("Error parseando el JSON oculto:", error);
                           }
                         }
 
                         if (outputProducts.length > 0) {
                           return outputProducts.map((prod: any, idx: number) => (
                             <tr key={idx} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
-                              <td className="px-4 py-3 font-bold text-slate-700">{prod.productName || prod.name || 'Producto'}</td>
+                              <td className="px-4 py-3 font-bold text-slate-700">{prod.productName}</td>
                               <td className="px-4 py-3 text-center font-black text-blue-600">
-                                <span className="bg-blue-50 px-2 py-0.5 rounded-md">{prod.quantity || 1}</span>
+                                <span className="bg-blue-50 px-2 py-0.5 rounded-md">{prod.quantity}</span>
                               </td>
                               <td className="px-4 py-3 text-right text-slate-500">
-                                ${Number(prod.salePrice || prod.unitCost || prod.price || 0).toLocaleString()}
+                                ${prod.unitPrice.toLocaleString()}
                               </td>
                               <td className="px-4 py-3 text-right font-black text-slate-900">
-                                ${(Number(prod.quantity || 1) * Number(prod.salePrice || prod.unitCost || prod.price || 0)).toLocaleString()}
+                                ${prod.totalSale.toLocaleString()}
                               </td>
                             </tr>
                           ));
