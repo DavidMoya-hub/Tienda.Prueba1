@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Calendar, ArrowUpCircle, ArrowDownCircle, Search, ClipboardList, Wallet, CheckCircle, Clock, AlertCircle, Edit, Trash2, X, Save, Eye } from 'lucide-react';
 import { dataService } from '../services/dataService';
 import { InputTransaction, OutputTransaction, DailyClosing, PriceHistory, PurchaseNote } from '../types';
@@ -71,6 +71,12 @@ const HistoryView: React.FC = () => {
   const sortedClosings = useMemo(() => filterAndSort(closings, [] as any), [closings, searchTerm, startDate, endDate, sortOrder]);
   const sortedDebts = useMemo(() => filterAndSort(purchaseNotes, ['provider'] as any), [purchaseNotes, searchTerm, startDate, endDate, sortOrder]);
   const sortedAudit = useMemo(() => filterAndSort(priceHistory, ['productName', 'field'] as any), [priceHistory, searchTerm, startDate, endDate, sortOrder]);
+  
+  useEffect(() => {
+    if (selectedDetail) {
+      console.log("RAYOS X - ITEM SELECCIONADO:", selectedDetail);
+    }
+  }, [selectedDetail]);
 
   const parseDetails = (json: string) => {
     try {
@@ -923,20 +929,40 @@ const HistoryView: React.FC = () => {
                     </thead>
                     <tbody className="divide-y divide-slate-50">
                       {(() => {
-                        let outputProducts = extractProducts(selectedDetail);
+                        let outputProducts: any[] = [];
 
-                        // Intento 2: Si es un puntero de Cierre Maestro, buscar la lista real en los Cierres
-                        const isMasterClosingPointer = selectedDetail?.productName === 'Cierre Maestro' || selectedDetail?.notes?.includes('Cierre Maestro');
+                        if (selectedDetail) {
+                          // 1. Intentar buscar en el propio ítem primero (Extracción agresiva)
+                          try {
+                            const raw = selectedDetail.soldProductsJson || selectedDetail.detailsJson || selectedDetail.products || selectedDetail.notes;
+                            if (typeof raw === 'string' && raw.includes('[')) {
+                              const startIdx = raw.indexOf('[');
+                              const endIdx = raw.lastIndexOf(']') + 1;
+                              outputProducts = JSON.parse(raw.substring(startIdx, endIdx));
+                            } else if (Array.isArray(raw)) {
+                              outputProducts = raw;
+                            }
+                          } catch(e) {}
 
-                        if (outputProducts.length === 0 && isMasterClosingPointer) {
-                          // Extraer el ID del cierre de las notas (ej. "Cierre Maestro: 12345") o coincidir por fecha exacta
-                          const closingIdMatch = selectedDetail?.notes?.match(/Cierre Maestro:\s*([a-zA-Z0-9_-]+)/);
-                          const linkedId = closingIdMatch ? closingIdMatch[1] : null;
+                          // 2. Si está vacío y es un Cierre, cruzar con la tabla de Closings por FECHA exacta o ID
+                          const isMasterClosing = selectedDetail.productName === 'Cierre Maestro' || String(selectedDetail.notes).includes('Cierre Maestro');
                           
-                          const linkedClosing = closings.find(c => c.id === linkedId || c.date === selectedDetail.date);
-                          
-                          if (linkedClosing) {
-                            outputProducts = extractProducts(linkedClosing); // Usamos el JSON del Cierre Padre
+                          if (outputProducts.length === 0 && isMasterClosing) {
+                             const allClosings = dataService.getClosings(); 
+
+                             // Buscar el cierre que ocurrió en el mismo segundo o que coincida en el ID
+                             const matchingClosing = allClosings.find(c => 
+                               c.date === selectedDetail.date || 
+                               String(selectedDetail.notes).includes(String(c.id))
+                             );
+
+                             if (matchingClosing) {
+                               console.log("¡CIERRE ENCONTRADO!", matchingClosing);
+                               try {
+                                 const rawClosing = matchingClosing.soldProductsJson || (matchingClosing as any).detailsJson || '[]';
+                                 outputProducts = typeof rawClosing === 'string' ? JSON.parse(rawClosing) : rawClosing;
+                               } catch(e) {}
+                             }
                           }
                         }
 
@@ -957,8 +983,8 @@ const HistoryView: React.FC = () => {
                           ));
                         }
 
-                        // Si no hay productos extraídos (salida manual o sin vínculo)
-                        if (selectedDetail.totalSold === undefined) {
+                        // Fallback para salidas manuales antiguas sin JSON
+                        if (selectedDetail && selectedDetail.totalSold === undefined) {
                           return (
                             <tr className="hover:bg-slate-50/50 transition-colors">
                               <td className="px-4 py-3 font-bold text-slate-700">{selectedDetail.productName || 'Desconocido'}</td>
