@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Calendar, ArrowUpCircle, ArrowDownCircle, Search, ClipboardList, Wallet, CheckCircle, Clock, AlertCircle, Edit, Trash2, X, Save, Eye } from 'lucide-react';
+import { Calendar, ArrowUpCircle, ArrowDownCircle, Search, ClipboardList, Wallet, CheckCircle, Clock, AlertCircle, Edit, Trash2, X, Save, Eye, FileText } from 'lucide-react';
 import { dataService } from '../services/dataService';
 import { InputTransaction, OutputTransaction, DailyClosing, PriceHistory, PurchaseNote } from '../types';
 import Modal from './Modal';
@@ -72,6 +72,58 @@ const HistoryView: React.FC = () => {
   const sortedDebts = useMemo(() => filterAndSort(purchaseNotes, ['provider'] as any), [purchaseNotes, searchTerm, startDate, endDate, sortOrder]);
   const sortedAudit = useMemo(() => filterAndSort(priceHistory, ['productName', 'field'] as any), [priceHistory, searchTerm, startDate, endDate, sortOrder]);
   
+  // --- LÓGICA DE EXTRACCIÓN DUAL PARA CIERRES ---
+  const allOutputs = dataService.getOutputs();
+  const allPurchaseNotes = dataService.getPurchaseNotes();
+  const allProducts = dataService.getProducts();
+
+  let closingProducts: any[] = [];
+  let closingDebts: any[] = [];
+
+  if (selectedDetail && (tab === 'Closings' || selectedDetail.totalSold !== undefined)) {
+    // --- A. EXTRAER DEUDAS PAGADAS DEL CIERRE ---
+    try {
+      const rawDebts = selectedDetail[""] || (selectedDetail as any).paidDebts || '[]';
+      if (typeof rawDebts === 'string' && rawDebts.includes('NOTE-')) {
+        const debtIds = JSON.parse(rawDebts);
+        closingDebts = debtIds.map((id: string) => {
+          const note = allPurchaseNotes.find(n => n.id === id);
+          return {
+            id: id,
+            supplier: note ? note.provider : 'Proveedor Desconocido',
+            total: note ? note.totalAmount : 0
+          };
+        });
+      }
+    } catch (e) { console.warn("Error parseando deudas:", e); }
+
+    // --- B. EXTRAER PRODUCTOS CRUZANDO CON OUTPUTS ---
+    const matchingOutput = allOutputs.find(out => 
+      out.date === selectedDetail.date || 
+      String(out.notes).includes(selectedDetail.id)
+    );
+
+    if (matchingOutput) {
+      try {
+        const rawProds = (matchingOutput as any)[""] || (matchingOutput as any).soldProductsJson || '[]';
+        if (typeof rawProds === 'string' && rawProds.includes('productId')) {
+          const parsedProds = JSON.parse(rawProds);
+          closingProducts = parsedProds.map((item: any) => {
+            const productDef = allProducts.find(p => p.id === item.productId);
+            const qty = Number(item.quantity || 1);
+            const total = Number(item.totalSale || item.totalCost || 0);
+            return {
+              productName: productDef ? productDef.name : 'Producto Eliminado',
+              quantity: qty,
+              totalSale: total,
+              unitPrice: total / qty
+            };
+          });
+        }
+      } catch (e) { console.warn("Error parseando productos desde output:", e); }
+    }
+  }
+
   useEffect(() => {
     if (selectedDetail) {
       console.log("RAYOS X - ITEM SELECCIONADO:", selectedDetail);
@@ -911,103 +963,167 @@ const HistoryView: React.FC = () => {
                 )}
               </div>
 
-              <div className="space-y-4">
-                <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
-                  <ClipboardList size={16} className={selectedDetail.totalSold !== undefined ? 'text-red-600' : 'text-emerald-600'} />
-                  <span>Desglose de Productos</span>
-                </h4>
-                
-                <div className="border border-slate-100 rounded-2xl overflow-hidden">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-50 text-slate-400 font-black uppercase tracking-widest">
-                      <tr>
-                        <th className="px-4 py-3">Producto</th>
-                        <th className="px-4 py-3 text-center">Cant</th>
-                        <th className="px-4 py-3 text-right">Precio</th>
-                        <th className="px-4 py-3 text-right">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-50">
-                      {(() => {
-                        // Extraer catálogo maestro para cruzar nombres
-                        const allProducts = dataService.getProducts();
-                        let outputProducts: any[] = [];
-
-                        if (selectedDetail) {
-                          try {
-                            // 1. Buscar el JSON en la clave vacía [""] o las de respaldo
-                            const rawData = selectedDetail[""] || selectedDetail.soldProductsJson || selectedDetail.detailsJson || '[]';
-                            
-                            // 2. Si es un JSON válido que contiene el productId
-                            if (typeof rawData === 'string' && rawData.includes('productId')) {
-                              const parsed = JSON.parse(rawData);
-                              
-                              // 3. Enriquecer el array mapeando el ID con el nombre real
-                              outputProducts = parsed.map((item: any) => {
-                                const productDef = allProducts.find(p => p.id === item.productId);
-                                const qty = Number(item.quantity || 1);
-                                const total = Number(item.totalSale || item.totalCost || 0);
-                                
-                                return {
-                                  productName: productDef ? productDef.name : 'Producto Eliminado/Desconocido',
-                                  quantity: qty,
-                                  totalSale: total,
-                                  unitPrice: total / qty // Calculamos el precio unitario matemáticamente
-                                };
-                              });
-                            }
-                          } catch (error) {
-                            console.warn("Error parseando el JSON oculto:", error);
-                          }
-                        }
-
-                        if (outputProducts.length > 0) {
-                          return outputProducts.map((prod: any, idx: number) => (
-                            <tr key={idx} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
-                              <td className="px-4 py-3 font-bold text-slate-700">{prod.productName}</td>
-                              <td className="px-4 py-3 text-center font-black text-blue-600">
-                                <span className="bg-blue-50 px-2 py-0.5 rounded-md">{prod.quantity}</span>
-                              </td>
-                              <td className="px-4 py-3 text-right text-slate-500">
-                                ${prod.unitPrice.toLocaleString()}
-                              </td>
-                              <td className="px-4 py-3 text-right font-black text-slate-900">
-                                ${prod.totalSale.toLocaleString()}
-                              </td>
+              {selectedDetail.totalSold !== undefined ? (
+                <>
+                  {/* SECCIÓN 1: PRODUCTOS VENDIDOS */}
+                  <div className="mt-6 flex items-center gap-2 mb-3">
+                    <FileText className="w-4 h-4 text-slate-400" />
+                    <h4 className="text-xs font-black text-slate-800 tracking-wider uppercase">Desglose de Productos</h4>
+                  </div>
+                  <div className="bg-slate-50 rounded-xl overflow-hidden border border-slate-100">
+                    <table className="w-full text-left">
+                      <thead className="bg-slate-50 text-slate-400 font-black uppercase tracking-widest">
+                        <tr>
+                          <th className="px-4 py-3 text-[10px]">Producto</th>
+                          <th className="px-4 py-3 text-[10px] text-center">Cant</th>
+                          <th className="px-4 py-3 text-[10px] text-right">Precio</th>
+                          <th className="px-4 py-3 text-[10px] text-right">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {closingProducts.length > 0 ? (
+                          closingProducts.map((prod, idx) => (
+                            <tr key={idx} className="border-b border-slate-100 hover:bg-white">
+                              <td className="p-3 text-sm font-bold text-slate-700">{prod.productName}</td>
+                              <td className="p-3 text-sm font-medium text-slate-600 text-center">{prod.quantity}</td>
+                              <td className="p-3 text-sm font-medium text-slate-600 text-right">${prod.unitPrice.toLocaleString()}</td>
+                              <td className="p-3 text-sm font-black text-slate-800 text-right">${prod.totalSale.toLocaleString()}</td>
                             </tr>
-                          ));
-                        }
+                          ))
+                        ) : (
+                          <tr><td colSpan={4} className="p-4 text-center text-sm text-slate-400 italic">No se encontraron productos para este cierre.</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
 
-                        // Fallback para salidas manuales antiguas sin JSON
-                        if (selectedDetail && selectedDetail.totalSold === undefined) {
-                          return (
-                            <tr className="hover:bg-slate-50/50 transition-colors">
-                              <td className="px-4 py-3 font-bold text-slate-700">{selectedDetail.productName || 'Desconocido'}</td>
-                              <td className="px-4 py-3 text-center font-black text-blue-600">
-                                <span className="bg-blue-50 px-2 py-0.5 rounded-md">{selectedDetail.quantity || 0}</span>
-                              </td>
-                              <td className="px-4 py-3 text-right text-slate-500">
-                                ${Number(selectedDetail.salePrice || 0).toLocaleString()}
-                              </td>
-                              <td className="px-4 py-3 text-right font-black text-slate-900">
-                                ${Number(selectedDetail.totalSale || 0).toLocaleString()}
-                              </td>
-                            </tr>
-                          );
-                        } else {
-                          return (
+                  {/* SECCIÓN 2: DEUDAS PAGADAS (SOLO SI HAY DEUDAS) */}
+                  {closingDebts.length > 0 && (
+                    <>
+                      <div className="mt-6 flex items-center gap-2 mb-3">
+                        <CheckCircle className="w-4 h-4 text-emerald-500" />
+                        <h4 className="text-xs font-black text-slate-800 tracking-wider uppercase">Deudas Liquidadas</h4>
+                      </div>
+                      <div className="bg-emerald-50 rounded-xl overflow-hidden border border-emerald-100">
+                        <table className="w-full text-left">
+                          <thead className="bg-emerald-100/50">
                             <tr>
-                              <td colSpan={4} className="px-4 py-8 text-center text-slate-400 font-bold italic">
-                                No se encontraron detalles desglosados para este registro.
-                              </td>
+                              <th className="p-3 text-[10px] font-bold text-emerald-800 uppercase tracking-wider">ID Deuda</th>
+                              <th className="p-3 text-[10px] font-bold text-emerald-800 uppercase tracking-wider">Proveedor</th>
+                              <th className="p-3 text-[10px] font-bold text-emerald-800 uppercase tracking-wider text-right">Monto Pagado</th>
                             </tr>
-                          );
-                        }
-                      })()}
-                    </tbody>
-                  </table>
+                          </thead>
+                          <tbody>
+                            {closingDebts.map((debt, idx) => (
+                              <tr key={idx} className="border-b border-emerald-100/50 hover:bg-emerald-100/30">
+                                <td className="p-3 text-sm font-medium text-slate-600">{debt.id}</td>
+                                <td className="p-3 text-sm font-bold text-slate-700">{debt.supplier}</td>
+                                <td className="p-3 text-sm font-black text-emerald-600 text-right">${debt.total.toLocaleString()}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
+                </>
+              ) : (
+                <div className="space-y-4">
+                  <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
+                    <ClipboardList size={16} className={selectedDetail.totalSold !== undefined ? 'text-red-600' : 'text-emerald-600'} />
+                    <span>Desglose de Productos</span>
+                  </h4>
+                  
+                  <div className="border border-slate-100 rounded-2xl overflow-hidden">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 text-slate-400 font-black uppercase tracking-widest">
+                        <tr>
+                          <th className="px-4 py-3">Producto</th>
+                          <th className="px-4 py-3 text-center">Cant</th>
+                          <th className="px-4 py-3 text-right">Precio</th>
+                          <th className="px-4 py-3 text-right">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50">
+                        {(() => {
+                          let outputProducts: any[] = [];
+
+                          if (selectedDetail) {
+                            try {
+                              // 1. Buscar el JSON en la clave vacía [""] o las de respaldo
+                              const rawData = selectedDetail[""] || selectedDetail.soldProductsJson || selectedDetail.detailsJson || '[]';
+                              
+                              // 2. Si es un JSON válido que contiene el productId
+                              if (typeof rawData === 'string' && rawData.includes('productId')) {
+                                const parsed = JSON.parse(rawData);
+                                
+                                // 3. Enriquecer el array mapeando el ID con el nombre real
+                                outputProducts = parsed.map((item: any) => {
+                                  const productDef = allProducts.find(p => p.id === item.productId);
+                                  const qty = Number(item.quantity || 1);
+                                  const total = Number(item.totalSale || item.totalCost || 0);
+                                  
+                                  return {
+                                    productName: productDef ? productDef.name : 'Producto Eliminado/Desconocido',
+                                    quantity: qty,
+                                    totalSale: total,
+                                    unitPrice: total / qty // Calculamos el precio unitario matemáticamente
+                                  };
+                                });
+                              }
+                            } catch (error) {
+                              console.warn("Error parseando el JSON oculto:", error);
+                            }
+                          }
+
+                          if (outputProducts.length > 0) {
+                            return outputProducts.map((prod: any, idx: number) => (
+                              <tr key={idx} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
+                                <td className="px-4 py-3 font-bold text-slate-700">{prod.productName}</td>
+                                <td className="px-4 py-3 text-center font-black text-blue-600">
+                                  <span className="bg-blue-50 px-2 py-0.5 rounded-md">{prod.quantity}</span>
+                                </td>
+                                <td className="px-4 py-3 text-right text-slate-500">
+                                  ${prod.unitPrice.toLocaleString()}
+                                </td>
+                                <td className="px-4 py-3 text-right font-black text-slate-900">
+                                  ${prod.totalSale.toLocaleString()}
+                                </td>
+                              </tr>
+                            ));
+                          }
+
+                          // Fallback para salidas manuales antiguas sin JSON
+                          if (selectedDetail && selectedDetail.totalSold === undefined) {
+                            return (
+                              <tr className="hover:bg-slate-50/50 transition-colors">
+                                <td className="px-4 py-3 font-bold text-slate-700">{selectedDetail.productName || 'Desconocido'}</td>
+                                <td className="px-4 py-3 text-center font-black text-blue-600">
+                                  <span className="bg-blue-50 px-2 py-0.5 rounded-md">{selectedDetail.quantity || 0}</span>
+                                </td>
+                                <td className="px-4 py-3 text-right text-slate-500">
+                                  ${Number(selectedDetail.salePrice || 0).toLocaleString()}
+                                </td>
+                                <td className="px-4 py-3 text-right font-black text-slate-900">
+                                  ${Number(selectedDetail.totalSale || 0).toLocaleString()}
+                                </td>
+                              </tr>
+                            );
+                          } else {
+                            return (
+                              <tr>
+                                <td colSpan={4} className="px-4 py-8 text-center text-slate-400 font-bold italic">
+                                  No se encontraron detalles desglosados para este registro.
+                                </td>
+                              </tr>
+                            );
+                          }
+                        })()}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
+              )}
               
               {selectedDetail.notes && (
                 <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100">
