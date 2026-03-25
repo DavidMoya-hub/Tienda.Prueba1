@@ -15,16 +15,28 @@ const runGas = async (action: string, data: any = null, retries = 2): Promise<an
     });
   }
 
-  // Entorno Vercel / Local (Fetch API al servidor Express)
-  const targetUrl = "/api/exec";
+  // Intentar primero a través del proxy local para evitar problemas de CORS
+  let targetUrl = "/api/exec";
   
   for (let i = 0; i <= retries; i++) {
     try {
-      const response = await fetch(targetUrl, {
+      let response = await fetch(targetUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, data })
       });
+
+      // Si el proxy devuelve 404 (no encontrado), intentamos directamente al GAS
+      // como último recurso (aunque puede fallar por CORS en el navegador)
+      if (response.status === 404 && targetUrl !== API_URL) {
+        console.warn("Proxy /api/exec no encontrado, intentando fetch directo a GAS...");
+        targetUrl = API_URL;
+        response = await fetch(targetUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action, data })
+        });
+      }
 
       if (!response.ok) {
         throw new Error(`Error de Servidor: ${response.status}`);
