@@ -34,7 +34,7 @@ const StatCard: React.FC<{ envelope: any, index: number }> = ({ envelope, index 
           {envelope.name}
         </h3>
         <p className={`text-xl md:text-4xl font-black tracking-tighter mb-2`}>
-          ${Number(envelope.balance).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+          ${Number(envelope.balance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </p>
         <p className={`text-[9px] md:text-xs font-medium ${isCapital ? 'text-blue-200' : 'text-slate-500'} italic`}>
           {envelope.description}
@@ -73,41 +73,51 @@ const Dashboard: React.FC = () => {
   const closings = dataService.getClosings();
   const products = dataService.getProducts();
   const envelopes = dataService.getEnvelopes();
+  const outputs = dataService.getOutputs();
 
   const { topVendidos, topGanancias, chartData } = useMemo(() => {
     const stats: Record<string, { name: string; qty: number; profit: number }> = {};
-    
-    closings.forEach(c => {
+    const allProducts = dataService.getProducts(); // Catálogo para cruzar nombres y costos
+
+    outputs.forEach(out => {
       let items: any[] = [];
-      
-      // Lógica de extracción blindada: Busca en todas las posibles propiedades
+
+      // 1. Intentar extraer JSON oculto de las salidas maestras
       try {
-        const rawData = (c as any).soldProductsJson || (c as any).detailsJson || (c as any).products || (c as any).soldItems;
-        if (typeof rawData === 'string') {
-          items = JSON.parse(rawData);
-        } else if (Array.isArray(rawData)) {
-          items = rawData;
+        const raw = (out as any)[""] || (out as any).soldProductsJson || (out as any).detailsJson;
+        if (typeof raw === 'string' && raw.includes('productId')) {
+          items = JSON.parse(raw);
+        } else if (Array.isArray(raw)) {
+          items = raw;
         }
-      } catch (e) {
-        console.warn('Error parseando productos de un cierre:', e);
+      } catch (e) {}
+
+      // 2. Si no es JSON, asumir que es salida individual antigua
+      if (items.length === 0 && out.productId && out.productName !== 'Cierre Maestro') {
+        items = [out];
       }
 
-      // Si logró extraer items, iteramos
-      if (Array.isArray(items)) {
-        items.forEach(item => {
-          // Validación de seguridad para propiedades indefinidas
-          const id = String(item.productId || item.code || item.name || 'desconocido');
-          const name = String(item.productName || item.name || 'Producto Desconocido');
-          const qty = Number(item.quantity || 1);
-          const salePrice = Number(item.salePrice || item.price || 0);
-          const unitCost = Number(item.unitCost || item.costPrice || 0);
-          
-          if (!stats[id]) stats[id] = { name, qty: 0, profit: 0 };
-          
-          stats[id].qty += qty;
-          stats[id].profit += (salePrice - unitCost) * qty;
-        });
-      }
+      // 3. Procesar y calcular
+      items.forEach(item => {
+        const id = String(item.productId || 'desconocido');
+        if (id === 'desconocido' || id === 'MASTER') return; // Ignorar punteros
+
+        // Cruce de datos con catálogo maestro
+        const productDef = allProducts.find(p => p.id === id);
+        const name = productDef ? productDef.name : (item.productName || item.name || 'Desconocido');
+        const costPrice = productDef ? Number(productDef.costPrice || 0) : Number(item.unitCost || 0);
+
+        const qty = Number(item.quantity || 0);
+        const totalSale = Number(item.totalSale || item.price || 0); 
+        
+        // Ganancia = Venta Total de la partida - (Costo Unitario * Cantidad)
+        const gananciaPartida = totalSale > 0 ? totalSale - (costPrice * qty) : 0;
+
+        if (!stats[id]) stats[id] = { name, qty: 0, profit: 0 };
+        
+        stats[id].qty += qty;
+        stats[id].profit += gananciaPartida;
+      });
     });
 
     const arr = Object.values(stats);
@@ -126,7 +136,7 @@ const Dashboard: React.FC = () => {
     ];
 
     return { topVendidos, topGanancias, chartData };
-  }, [closings, products, envelopes]);
+  }, [closings, products, envelopes, outputs]);
 
   if (loading) return (
     <div className="flex items-center justify-center h-96">
@@ -267,7 +277,7 @@ const Dashboard: React.FC = () => {
                   topGanancias.map((item, i) => (
                     <div key={i} className="flex justify-between items-center p-3 bg-red-50 hover:bg-red-100 rounded-xl transition-colors">
                       <span className="text-sm font-bold text-slate-700">{item.name}</span>
-                      <span className="text-xs font-black text-red-600 bg-red-100 px-2 py-1 rounded-md">${item.profit.toLocaleString()}</span>
+                      <span className="text-xs font-black text-red-600 bg-red-100 px-2 py-1 rounded-md">${item.profit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     </div>
                   ))
                 }
@@ -303,7 +313,7 @@ const Dashboard: React.FC = () => {
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <div className="text-center">
                   <span className="text-[8px] md:text-[10px] font-black uppercase text-slate-500 tracking-widest block">Total</span>
-                  <span className="text-lg md:text-2xl font-black">${(chartData.reduce((a:any, b:any) => a + b.value, 0)).toLocaleString()}</span>
+                  <span className="text-lg md:text-2xl font-black">${(chartData.reduce((a:any, b:any) => a + b.value, 0)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
               </div>
             </div>
@@ -315,7 +325,7 @@ const Dashboard: React.FC = () => {
                      <div className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full" style={{backgroundColor: PIE_COLORS[index]}}></div>
                      <span className="text-[10px] md:text-xs font-bold text-slate-300">{entry.name}</span>
                    </div>
-                   <span className="font-black text-xs md:text-sm">${entry.value.toLocaleString()}</span>
+                   <span className="font-black text-xs md:text-sm">${entry.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                  </div>
                ))}
             </div>
