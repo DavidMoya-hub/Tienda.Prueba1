@@ -6,7 +6,7 @@ declare var google: any;
 
 const isGasEnv = typeof google !== 'undefined' && google.script && google.script.run;
 
-const runGas = async (action: string, data: any = null): Promise<any> => {
+const runGas = async (action: string, data: any = null, retries = 2): Promise<any> => {
   if (isGasEnv) {
     return new Promise((resolve, reject) => {
       (google.script.run as any)
@@ -16,43 +16,45 @@ const runGas = async (action: string, data: any = null): Promise<any> => {
   }
 
   // Entorno Vercel / Local (Fetch API Directo)
-  try {
-    const response = await fetch(API_URL, {
-      method: 'POST',
-      redirect: 'follow',
-      mode: 'cors',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action, data })
-    });
-
-    // Verificación de estado 200 o 302
-    if (!response.ok && response.status !== 302) {
-      throw new Error(`Error de Servidor: ${response.status}`);
-    }
-
-    const text = await response.text();
-    
-    if (text.includes('<html') || text.includes('<!DOCTYPE html>')) {
-      throw new Error("Error de Servidor: El servidor devolvió una página de error (HTML). Verifica la URL del script.");
-    }
-
+  for (let i = 0; i <= retries; i++) {
     try {
-      const json = JSON.parse(text);
-      if (json && json.error) throw new Error(json.error);
-      
-      // Devolvemos el JSON tal cual. Si es un array (para GET), se mantiene como array.
-      // Si es un objeto (para POST), se mantiene como objeto.
-      return json;
-    } catch (e) {
-      // Si no es JSON pero el status es OK, devolvemos un objeto de éxito
-      if (response.ok || response.status === 302) {
-        return { success: true };
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        redirect: 'follow',
+        mode: 'cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action, data })
+      });
+
+      // Verificación de estado 200 o 302
+      if (!response.ok && response.status !== 302) {
+        throw new Error(`Error de Servidor: ${response.status}`);
       }
-      throw new Error("Error de Servidor: La respuesta no es un JSON válido. Respuesta recibida: " + text.substring(0, 100));
+
+      const text = await response.text();
+      
+      if (text.includes('<html') || text.includes('<!DOCTYPE html>')) {
+        throw new Error("Error de Servidor: El servidor devolvió una página de error (HTML). Verifica la URL del script.");
+      }
+
+      try {
+        const json = JSON.parse(text);
+        if (json && json.error) throw new Error(json.error);
+        return json;
+      } catch (e) {
+        if (response.ok || response.status === 302) {
+          return { success: true };
+        }
+        throw new Error("Error de Servidor: La respuesta no es un JSON válido. Respuesta recibida: " + text.substring(0, 100));
+      }
+    } catch (error) {
+      if (i === retries) {
+        console.error(`Error en fetch directo (${action}):`, error);
+        throw error;
+      }
+      // Esperar un poco antes de reintentar
+      await new Promise(r => setTimeout(r, 1000 * (i + 1)));
     }
-  } catch (error) {
-    console.error(`Error en fetch directo (${action}):`, error);
-    throw error;
   }
 };
 
@@ -82,16 +84,14 @@ export const dataService = {
 
   async fetchAll() {
     try {
-      const [products, envelopes, envHistory, purchaseNotes, inputs, outputs, closings, priceHistory] = await Promise.all([
-        runGas('getProducts'),
-        runGas('getEnvelopes'),
-        runGas('getEnvelopeHistory'),
-        runGas('getPurchaseNotes'),
-        runGas('getInputs'),
-        runGas('getOutputs'),
-        runGas('getClosings'),
-        runGas('getPriceHistory'),
-      ]);
+      const products = await runGas('getProducts');
+      const envelopes = await runGas('getEnvelopes');
+      const envHistory = await runGas('getEnvelopeHistory');
+      const purchaseNotes = await runGas('getPurchaseNotes');
+      const inputs = await runGas('getInputs');
+      const outputs = await runGas('getOutputs');
+      const closings = await runGas('getClosings');
+      const priceHistory = await runGas('getPriceHistory');
 
       this._products = (Array.isArray(products) ? products : []).map((p: any) => ({
         ...p,
