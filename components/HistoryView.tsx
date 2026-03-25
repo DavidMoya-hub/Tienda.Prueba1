@@ -124,6 +124,9 @@ const HistoryView: React.FC = () => {
     }
   }
 
+  const totalClosingProducts = closingProducts.reduce((acc, p) => acc + (p.totalSale || 0), 0);
+  const totalClosingDebts = closingDebts.reduce((acc, d) => acc + (d.total || 0), 0);
+
   useEffect(() => {
     if (selectedDetail) {
       console.log("RAYOS X - ITEM SELECCIONADO:", selectedDetail);
@@ -993,6 +996,12 @@ const HistoryView: React.FC = () => {
                         ) : (
                           <tr><td colSpan={4} className="p-4 text-center text-sm text-slate-400 italic">No se encontraron productos para este cierre.</td></tr>
                         )}
+                        {closingProducts.length > 0 && (
+                          <tr className="bg-slate-100/50 border-t-2 border-slate-200">
+                            <td colSpan={3} className="p-3 text-right text-[10px] font-black text-slate-500 uppercase tracking-widest">Total Productos</td>
+                            <td className="p-3 text-sm font-black text-blue-600 text-right">${totalClosingProducts.toLocaleString()}</td>
+                          </tr>
+                        )}
                       </tbody>
                     </table>
                   </div>
@@ -1021,6 +1030,10 @@ const HistoryView: React.FC = () => {
                                 <td className="p-3 text-sm font-black text-emerald-600 text-right">${debt.total.toLocaleString()}</td>
                               </tr>
                             ))}
+                            <tr className="bg-emerald-100/30 border-t-2 border-emerald-200">
+                              <td colSpan={2} className="p-3 text-right text-[10px] font-black text-emerald-800 uppercase tracking-widest">Total Deudas Liquidadas</td>
+                              <td className="p-3 text-sm font-black text-emerald-700 text-right">${totalClosingDebts.toLocaleString()}</td>
+                            </tr>
                           </tbody>
                         </table>
                       </div>
@@ -1077,20 +1090,29 @@ const HistoryView: React.FC = () => {
                           }
 
                           if (outputProducts.length > 0) {
-                            return outputProducts.map((prod: any, idx: number) => (
-                              <tr key={idx} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
-                                <td className="px-4 py-3 font-bold text-slate-700">{prod.productName}</td>
-                                <td className="px-4 py-3 text-center font-black text-blue-600">
-                                  <span className="bg-blue-50 px-2 py-0.5 rounded-md">{prod.quantity}</span>
-                                </td>
-                                <td className="px-4 py-3 text-right text-slate-500">
-                                  ${prod.unitPrice.toLocaleString()}
-                                </td>
-                                <td className="px-4 py-3 text-right font-black text-slate-900">
-                                  ${prod.totalSale.toLocaleString()}
-                                </td>
-                              </tr>
-                            ));
+                            const totalOutputProducts = outputProducts.reduce((acc: number, p: any) => acc + (p.totalSale || 0), 0);
+                            return (
+                              <>
+                                {outputProducts.map((prod: any, idx: number) => (
+                                  <tr key={idx} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
+                                    <td className="px-4 py-3 font-bold text-slate-700">{prod.productName}</td>
+                                    <td className="px-4 py-3 text-center font-black text-blue-600">
+                                      <span className="bg-blue-50 px-2 py-0.5 rounded-md">{prod.quantity}</span>
+                                    </td>
+                                    <td className="px-4 py-3 text-right text-slate-500">
+                                      ${prod.unitPrice.toLocaleString()}
+                                    </td>
+                                    <td className="px-4 py-3 text-right font-black text-slate-900">
+                                      ${prod.totalSale.toLocaleString()}
+                                    </td>
+                                  </tr>
+                                ))}
+                                <tr className="bg-slate-100/50 border-t-2 border-slate-200">
+                                  <td colSpan={3} className="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase tracking-widest">Total Salida</td>
+                                  <td className="px-4 py-3 text-right font-black text-emerald-600 text-sm">${totalOutputProducts.toLocaleString()}</td>
+                                </tr>
+                              </>
+                            );
                           }
 
                           // Fallback para salidas manuales antiguas sin JSON
