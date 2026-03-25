@@ -25,7 +25,7 @@ const INITIAL_DATA = {
   Inputs: [],
   Outputs: [],
   Closings: [],
-  PriceHistory: []
+  AuditLog: []
 };
 
 function readDb() {
@@ -51,9 +51,38 @@ async function startServer() {
   app.use(cors());
   app.use(express.json());
 
+  const API_URL = "https://script.google.com/macros/s/AKfycbwoxAshVgfv0t3zvE-vhIsE5Rfuv5ljg5hv2_rISGlWqEQ6SbDbYY-Rlmvsnn1uhvHQPQ/exec";
+
   // API Routes
-  app.post("/api/exec", (req, res) => {
+  app.post("/api/exec", async (req, res) => {
     const { action, data } = req.body;
+    
+    // Mapear acciones nuevas a nombres antiguos para GAS si es necesario
+    let gasAction = action;
+    if (action === 'getAudits') gasAction = 'getPriceHistory';
+    if (action === 'saveAudit') gasAction = 'savePriceHistory';
+    if (action === 'deleteAudit') gasAction = 'deletePriceHistory';
+
+    // Intentar llamar al script de Google Apps Script si está disponible
+    if (API_URL && !API_URL.includes("TODO")) {
+      try {
+        const gasResponse = await fetch(API_URL, {
+          method: 'POST',
+          body: JSON.stringify({ action: gasAction, data }),
+          headers: { 'Content-Type': 'application/json' }
+        });
+        if (gasResponse.ok) {
+          const gasJson = await gasResponse.json();
+          if (!gasJson.error) {
+            return res.json(gasJson);
+          }
+          console.warn("GAS returned error, falling back to local DB:", gasJson.error);
+        }
+      } catch (gasError) {
+        console.error("Error llamando a GAS, usando DB local:", gasError);
+      }
+    }
+
     const db = readDb();
     let result: any = { success: true };
 
@@ -70,7 +99,7 @@ async function startServer() {
               inputs: db.Inputs || [],
               outputs: db.Outputs || [],
               closings: db.Closings || [],
-              priceHistory: db.PriceHistory || []
+              priceHistory: db.AuditLog || []
             }
           };
           break;
@@ -83,7 +112,8 @@ async function startServer() {
         case 'getInputs': result = { success: true, data: db.Inputs }; break;
         case 'getOutputs': result = { success: true, data: db.Outputs }; break;
         case 'getClosings': result = { success: true, data: db.Closings }; break;
-        case 'getPriceHistory': result = { success: true, data: db.PriceHistory }; break;
+        case 'getPriceHistory':
+        case 'getAudits': result = { success: true, data: db.AuditLog }; break;
 
         case 'saveProduct': {
           if (!data.id) {
@@ -296,15 +326,17 @@ async function startServer() {
           break;
         }
 
-        case 'savePriceHistory': {
+        case 'savePriceHistory':
+        case 'saveAudit': {
           if (!data.id) data.id = "AUDIT-" + Math.random().toString(36).substr(2, 9);
-          db.PriceHistory.push(data);
+          db.AuditLog.push(data);
           writeDb(db);
           break;
         }
 
-        case 'deletePriceHistory': {
-          db.PriceHistory = db.PriceHistory.filter((h: any) => h.id !== data);
+        case 'deletePriceHistory':
+        case 'deleteAudit': {
+          db.AuditLog = db.AuditLog.filter((h: any) => h.id !== data);
           writeDb(db);
           break;
         }

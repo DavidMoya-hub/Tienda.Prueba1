@@ -15,7 +15,8 @@ function doGet(e) {
     case 'getInputs': result = getSheetData("Inputs"); break;
     case 'getOutputs': result = getSheetData("Outputs"); break;
     case 'getClosings': result = getSheetData("Closings"); break;
-    case 'getPriceHistory': result = getSheetData("PriceHistory"); break;
+    case 'getPriceHistory':
+    case 'getAudits': result = getSheetData("PriceHistory"); break;
     default: result = {error: "Acción no reconocida o no soportada vía GET"};
   }
   return createResponse(result);
@@ -47,7 +48,8 @@ function doPost(e) {
       case 'getInputs': result = getSheetData("Inputs"); break;
       case 'getOutputs': result = getSheetData("Outputs"); break;
       case 'getClosings': result = getSheetData("Closings"); break;
-      case 'getPriceHistory': result = getSheetData("PriceHistory"); break;
+      case 'getPriceHistory':
+      case 'getAudits': result = getSheetData("PriceHistory"); break;
 
       // --- SOBRES ---
       case 'saveEnvelope': result = saveEnvelope(data); break;
@@ -65,7 +67,8 @@ function doPost(e) {
       case 'saveClosing': result = saveClosing(data); break;
       case 'saveMasterClosing': result = saveMasterClosing(data); break;
       case 'updateClosing': result = updateClosing(data.id, data.newData); break;
-      case 'savePriceHistory': result = savePriceHistory(data); break;
+      case 'savePriceHistory':
+      case 'saveAudit': result = saveAudit(data); break;
       case 'updateNoteStatus': result = updateNoteStatus(data.id, data.status, data.source); break;
       case 'updatePurchaseNoteDetails': result = updatePurchaseNoteDetails(data); break;
       case 'processPhysicalCount': result = processPhysicalCount(data.counts, data.shift); break;
@@ -75,7 +78,8 @@ function doPost(e) {
       case 'deleteInput': result = deleteInput(extractId(data)); break;
       case 'deleteOutput': result = deleteOutput(extractId(data)); break;
       case 'deleteClosing': result = deleteClosing(extractId(data)); break;
-      case 'deletePriceHistory': result = deletePriceHistory(extractId(data)); break;
+      case 'deletePriceHistory':
+      case 'deleteAudit': result = deleteAudit(extractId(data)); break;
       case 'deletePurchaseNote': result = deletePurchaseNote(extractId(data)); break;
       
       case 'setup': result = setupSheet(); break;
@@ -1149,9 +1153,9 @@ function saveOutput(o) {
   return upsertToSheet("Outputs", headers, o, "id");
 }
 
-function deletePriceHistory(id) { return {success: deleteRow("PriceHistory", id)}; }
+function deleteAudit(id) { return {success: deleteRow("PriceHistory", id)}; }
 
-function savePriceHistory(h) {
+function saveAudit(h) {
   const headers = ["id", "productId", "productName", "field", "oldValue", "newValue", "date"];
   return upsertToSheet("PriceHistory", headers, h, "id");
 }

@@ -33,7 +33,7 @@ const HistoryView: React.FC = () => {
   const inputs = dataService.getInputs();
   const outputs = dataService.getOutputs();
   const closings = dataService.getClosings();
-  const priceHistory = dataService.getPriceHistory();
+  const priceHistory = dataService.getAudits();
   const purchaseNotes = dataService.getPurchaseNotes();
 
   const filterAndSort = <T extends { date: string }>(data: T[], searchFields: (keyof T)[]) => {
@@ -72,18 +72,26 @@ const HistoryView: React.FC = () => {
   const sortedDebts = useMemo(() => filterAndSort(purchaseNotes, ['provider'] as any), [purchaseNotes, searchTerm, startDate, endDate, sortOrder]);
   const sortedAudit = useMemo(() => filterAndSort(priceHistory, ['productName', 'field'] as any), [priceHistory, searchTerm, startDate, endDate, sortOrder]);
   
+  const totalOutputsValue = useMemo(() => sortedOutputs.reduce((acc, curr) => acc + (Number(curr.totalSale) || 0), 0), [sortedOutputs]);
+  const totalClosingsSales = useMemo(() => sortedClosings.reduce((acc, curr) => acc + (Number(curr.totalSold) || 0), 0), [sortedClosings]);
+  const totalClosingsCogs = useMemo(() => sortedClosings.reduce((acc, curr) => acc + (Number(curr.cogs) || 0), 0), [sortedClosings]);
+  const totalClosingsProfit = useMemo(() => sortedClosings.reduce((acc, curr) => acc + (Number(curr.netProfit) || 0), 0), [sortedClosings]);
+  const totalClosingsDebts = useMemo(() => sortedClosings.reduce((acc, curr) => acc + (Number(curr.debtsPaid) || 0), 0), [sortedClosings]);
+  const totalClosingsCash = useMemo(() => sortedClosings.reduce((acc, curr) => acc + (Number(curr.cashInBox || curr.totalSold) || 0), 0), [sortedClosings]);
+
   // --- LÓGICA DE EXTRACCIÓN DUAL PARA CIERRES ---
   const allOutputs = dataService.getOutputs();
   const allPurchaseNotes = dataService.getPurchaseNotes();
   const allProducts = dataService.getProducts();
 
-  let closingProducts: any[] = [];
-  let closingDebts: any[] = [];
+  let closingProducts: { productName: string, quantity: number, totalSale: number, unitPrice: number }[] = [];
+  let closingDebts: { id: string, supplier: string, total: number }[] = [];
 
-  if (selectedDetail && (tab === 'Closings' || selectedDetail.totalSold !== undefined)) {
+  if (selectedDetail && (tab === 'Closings' || (selectedDetail as any).totalSold !== undefined)) {
+    const closing = selectedDetail as DailyClosing;
     // --- A. EXTRAER DEUDAS PAGADAS DEL CIERRE ---
     try {
-      const rawDebts = selectedDetail[""] || (selectedDetail as any).paidDebts || '[]';
+      const rawDebts = closing.paidDebtIds || (closing as any).paidDebts || '[]';
       if (typeof rawDebts === 'string' && rawDebts.includes('NOTE-')) {
         const debtIds = JSON.parse(rawDebts);
         closingDebts = debtIds.map((id: string) => {
@@ -99,13 +107,13 @@ const HistoryView: React.FC = () => {
 
     // --- B. EXTRAER PRODUCTOS CRUZANDO CON OUTPUTS ---
     const matchingOutput = allOutputs.find(out => 
-      out.date === selectedDetail.date || 
-      String(out.notes).includes(selectedDetail.id)
+      out.date === closing.date || 
+      String(out.notes).includes(closing.id)
     );
 
     if (matchingOutput) {
       try {
-        const rawProds = (matchingOutput as any)[""] || (matchingOutput as any).soldProductsJson || '[]';
+        const rawProds = matchingOutput.soldProductsJson || (matchingOutput as any).detailsJson || '[]';
         if (typeof rawProds === 'string' && rawProds.includes('productId')) {
           const parsedProds = JSON.parse(rawProds);
           closingProducts = parsedProds.map((item: any) => {
@@ -291,7 +299,7 @@ const HistoryView: React.FC = () => {
         case 'Output': await dataService.deleteOutput(id); break;
         case 'Closing': await dataService.deleteClosing(id); break;
         case 'Debt': await dataService.deletePurchaseNote(id); break;
-        case 'Audit': await dataService.deletePriceHistory(id); break;
+        case 'Audit': await dataService.deleteAudit(id); break;
       }
       setModal({
         isOpen: true,
@@ -319,7 +327,7 @@ const HistoryView: React.FC = () => {
         case 'Output': await dataService.saveOutput(editingItem); break;
         case 'Closing': await dataService.saveClosing(editingItem); break;
         case 'Debt': await dataService.saveRestockNote(editingItem); break;
-        case 'Audit': await dataService.savePriceHistory(editingItem); break;
+        case 'Audit': await dataService.saveAudit(editingItem); break;
       }
       setEditingItem(null);
       setEditType(null);
@@ -546,6 +554,13 @@ const HistoryView: React.FC = () => {
                   </tr>
                 ))}
               </tbody>
+              <tfoot className="bg-emerald-50/80 font-black text-emerald-900 border-t-2 border-emerald-200">
+                <tr>
+                  <td colSpan={4} className="px-4 md:px-8 py-4 text-right uppercase tracking-widest text-[10px]">Total Salidas</td>
+                  <td className="px-4 md:px-8 py-4 text-right text-lg md:text-xl">${totalOutputsValue.toFixed(2)}</td>
+                  <td></td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         )}
@@ -603,6 +618,17 @@ const HistoryView: React.FC = () => {
                   </tr>
                 ))}
               </tbody>
+              <tfoot className="bg-blue-50/80 font-black text-blue-900 border-t-2 border-blue-200">
+                <tr>
+                  <td className="px-4 md:px-8 py-4 text-right uppercase tracking-widest text-[10px]">Totales</td>
+                  <td className="px-4 md:px-8 py-4 text-blue-600 text-lg md:text-xl tracking-tighter">${totalClosingsSales.toLocaleString()}</td>
+                  <td className="px-4 md:px-8 py-4 text-slate-400">-${totalClosingsCogs.toLocaleString()}</td>
+                  <td className="px-4 md:px-8 py-4 text-emerald-600 text-lg md:text-xl tracking-tighter">${totalClosingsProfit.toLocaleString()}</td>
+                  <td className="px-4 md:px-8 py-4 text-red-600">${totalClosingsDebts.toLocaleString()}</td>
+                  <td className="px-4 md:px-8 py-4 text-blue-900 text-lg md:text-xl tracking-tighter">${totalClosingsCash.toLocaleString()}</td>
+                  <td></td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         )}

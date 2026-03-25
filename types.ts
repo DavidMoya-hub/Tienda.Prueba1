@@ -82,6 +82,7 @@ export interface OutputTransaction {
   shift: string;
   notes: string;
   type: 'exit';
+  soldProductsJson?: string;
 }
 
 export interface DailyClosing {
@@ -93,6 +94,7 @@ export interface DailyClosing {
   debtsPaid: number;
   cashInBox: number;
   soldProductsJson?: string;
+  paidDebtIds?: string; // JSON string of debt IDs
   notes?: string;
 }
 

@@ -51,7 +51,7 @@ export const dataService = {
   _inputs: [] as InputTransaction[],
   _outputs: [] as OutputTransaction[],
   _closings: [] as DailyClosing[],
-  _priceHistory: [] as AuditLog[],
+  _audits: [] as AuditLog[],
   _draftPhysicalCount: [] as OutputTransaction[],
   _draftClosingData: null as any[] | null,
   _listeners: [] as (() => void)[],
@@ -76,7 +76,7 @@ export const dataService = {
       const inputs = await runGas('getInputs');
       const outputs = await runGas('getOutputs');
       const closings = await runGas('getClosings');
-      const priceHistory = await runGas('getPriceHistory');
+      const priceHistory = await runGas('getAudits');
 
       this._products = (Array.isArray(products) ? products : []).map((p: any) => ({
         ...p,
@@ -102,7 +102,7 @@ export const dataService = {
         debtsPaid: Number(c.debtsPaid || 0),
         cashInBox: Number(c.cashInBox || 0)
       }));
-      this._priceHistory = Array.isArray(priceHistory) ? priceHistory : [];
+      this._audits = Array.isArray(priceHistory) ? priceHistory : [];
       
       this._notify();
     } catch (e) { 
@@ -118,7 +118,7 @@ export const dataService = {
   getInputs() { return this._inputs; },
   getOutputs() { return this._outputs; },
   getClosings() { return this._closings; },
-  getPriceHistory() { return this._priceHistory; },
+  getAudits() { return this._audits; },
   getDraftPhysicalCount() { return this._draftPhysicalCount; },
   setDraftPhysicalCount(draft: OutputTransaction[]) {
     this._draftPhysicalCount = draft;
@@ -156,7 +156,7 @@ export const dataService = {
     const oldProduct = this._products.find(prod => prod.id === p.id);
     if (oldProduct) {
       if (Number(oldProduct.costPrice) !== Number(p.costPrice)) {
-        await this.savePriceHistory({ 
+        await this.saveAudit({ 
           id: "AUDIT-" + Math.random().toString(36).substr(2, 9),
           productId: p.id, 
           productName: p.name, 
@@ -167,7 +167,7 @@ export const dataService = {
         });
       }
       if (Number(oldProduct.salePrice) !== Number(p.salePrice)) {
-        await this.savePriceHistory({ 
+        await this.saveAudit({ 
           id: "AUDIT-" + Math.random().toString(36).substr(2, 9),
           productId: p.id, 
           productName: p.name, 
@@ -487,8 +487,8 @@ export const dataService = {
     }
     return res;
   },
-  async savePriceHistory(h: AuditLog) { await runGas('savePriceHistory', h); await this.fetchAll(); },
-  async deletePriceHistory(id: string) { await runGas('deletePriceHistory', id); await this.fetchAll(); },
+  async saveAudit(h: AuditLog) { await runGas('saveAudit', h); await this.fetchAll(); },
+  async deleteAudit(id: string) { await runGas('deleteAudit', id); await this.fetchAll(); },
   async saveEnvelope(e: Envelope) { await runGas('saveEnvelope', e); await this.fetchAll(); },
   async updateEnvelope(envelope: Partial<Envelope> & { id: string }) {
     const res = await runGas('updateEnvelope', envelope);
