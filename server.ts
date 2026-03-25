@@ -297,7 +297,7 @@ async function startServer() {
         }
 
         case 'savePriceHistory': {
-          if (!data.id) data.id = "PRICE-" + Math.random().toString(36).substr(2, 9);
+          if (!data.id) data.id = "AUDIT-" + Math.random().toString(36).substr(2, 9);
           db.PriceHistory.push(data);
           writeDb(db);
           break;

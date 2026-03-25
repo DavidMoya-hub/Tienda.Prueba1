@@ -961,7 +961,7 @@ function updateClosing(id, newData) {
   return saveMasterClosing(newData);
 }
 
-function deletePriceHistory(id) { return {success: deleteRow("PriceHistory", id)}; }
+function deleteAudit(id) { return {success: deleteRow("AuditLog", id)}; }
 function deletePurchaseNote(id) {
   const noteId = id.toString().trim();
   const noteSheet = getSheet("PurchaseNotes");
@@ -1148,6 +1148,8 @@ function saveOutput(o) {
 
   return upsertToSheet("Outputs", headers, o, "id");
 }
+
+function deletePriceHistory(id) { return {success: deleteRow("PriceHistory", id)}; }
 
 function savePriceHistory(h) {
   const headers = ["id", "productId", "productName", "field", "oldValue", "newValue", "date"];

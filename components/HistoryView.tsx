@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Calendar, ArrowUpCircle, ArrowDownCircle, Search, ClipboardList, Wallet, CheckCircle, Clock, AlertCircle, Edit, Trash2, X, Save, Eye, FileText } from 'lucide-react';
 import { dataService } from '../services/dataService';
-import { InputTransaction, OutputTransaction, DailyClosing, PriceHistory, PurchaseNote } from '../types';
+import { InputTransaction, OutputTransaction, DailyClosing, AuditLog, PurchaseNote } from '../types';
 import Modal from './Modal';
 
 const HistoryView: React.FC = () => {

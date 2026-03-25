@@ -1,4 +1,4 @@
-import { Product, InputTransaction, OutputTransaction, DailyClosing, PriceHistory, PurchaseNote, Envelope, EnvelopeWithdrawal } from "../types";
+import { Product, InputTransaction, OutputTransaction, DailyClosing, AuditLog, PurchaseNote, Envelope, EnvelopeWithdrawal } from "../types";
 
 const API_URL = "https://script.google.com/macros/s/AKfycbzRaaRAOYsDQyBi8OSjN-HRs4963tTr95Te0tm1sBmXnFJ9ae4oacyJZUIFTMGBFijgQw/exec";
 
@@ -15,44 +15,29 @@ const runGas = async (action: string, data: any = null, retries = 2): Promise<an
     });
   }
 
-  // Entorno Vercel / Local (Fetch API Directo)
+  // Entorno Vercel / Local (Fetch API al servidor Express)
+  const targetUrl = "/api/exec";
+  
   for (let i = 0; i <= retries; i++) {
     try {
-      const response = await fetch(API_URL, {
+      const response = await fetch(targetUrl, {
         method: 'POST',
-        redirect: 'follow',
-        mode: 'cors',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, data })
       });
 
-      // Verificación de estado 200 o 302
-      if (!response.ok && response.status !== 302) {
+      if (!response.ok) {
         throw new Error(`Error de Servidor: ${response.status}`);
       }
 
-      const text = await response.text();
-      
-      if (text.includes('<html') || text.includes('<!DOCTYPE html>')) {
-        throw new Error("Error de Servidor: El servidor devolvió una página de error (HTML). Verifica la URL del script.");
-      }
-
-      try {
-        const json = JSON.parse(text);
-        if (json && json.error) throw new Error(json.error);
-        return json;
-      } catch (e) {
-        if (response.ok || response.status === 302) {
-          return { success: true };
-        }
-        throw new Error("Error de Servidor: La respuesta no es un JSON válido. Respuesta recibida: " + text.substring(0, 100));
-      }
+      const json = await response.json();
+      if (json && json.error) throw new Error(json.error);
+      return json.data || json;
     } catch (error) {
       if (i === retries) {
         console.error(`Error en fetch directo (${action}):`, error);
         throw error;
       }
-      // Esperar un poco antes de reintentar
       await new Promise(r => setTimeout(r, 1000 * (i + 1)));
     }
   }
@@ -66,7 +51,7 @@ export const dataService = {
   _inputs: [] as InputTransaction[],
   _outputs: [] as OutputTransaction[],
   _closings: [] as DailyClosing[],
-  _priceHistory: [] as PriceHistory[],
+  _priceHistory: [] as AuditLog[],
   _draftPhysicalCount: [] as OutputTransaction[],
   _draftClosingData: null as any[] | null,
   _listeners: [] as (() => void)[],
@@ -168,6 +153,31 @@ export const dataService = {
   },
 
   async saveProduct(p: Product) {
+    const oldProduct = this._products.find(prod => prod.id === p.id);
+    if (oldProduct) {
+      if (Number(oldProduct.costPrice) !== Number(p.costPrice)) {
+        await this.savePriceHistory({ 
+          id: "AUDIT-" + Math.random().toString(36).substr(2, 9),
+          productId: p.id, 
+          productName: p.name, 
+          field: 'Costo', 
+          oldValue: oldProduct.costPrice, 
+          newValue: p.costPrice, 
+          date: new Date().toISOString() 
+        });
+      }
+      if (Number(oldProduct.salePrice) !== Number(p.salePrice)) {
+        await this.savePriceHistory({ 
+          id: "AUDIT-" + Math.random().toString(36).substr(2, 9),
+          productId: p.id, 
+          productName: p.name, 
+          field: 'Precio', 
+          oldValue: oldProduct.salePrice, 
+          newValue: p.salePrice, 
+          date: new Date().toISOString() 
+        });
+      }
+    }
     const res = await runGas('saveProduct', p);
     if (res && res.success) {
       const index = this._products.findIndex(prod => prod.id === p.id);
@@ -477,7 +487,7 @@ export const dataService = {
     }
     return res;
   },
-  async savePriceHistory(h: PriceHistory) { await runGas('savePriceHistory', h); await this.fetchAll(); },
+  async savePriceHistory(h: AuditLog) { await runGas('savePriceHistory', h); await this.fetchAll(); },
   async deletePriceHistory(id: string) { await runGas('deletePriceHistory', id); await this.fetchAll(); },
   async saveEnvelope(e: Envelope) { await runGas('saveEnvelope', e); await this.fetchAll(); },
   async updateEnvelope(envelope: Partial<Envelope> & { id: string }) {

@@ -36,7 +36,7 @@ export interface EnvelopeWithdrawal {
   notes: string;
 }
 
-export interface PriceHistory {
+export interface AuditLog {
   id: string;
   productId: string;
   productName: string;
