@@ -15,28 +15,17 @@ const runGas = async (action: string, data: any = null, retries = 2): Promise<an
     });
   }
 
-  // Intentar primero a través del proxy local para evitar problemas de CORS
-  let targetUrl = "/api/exec";
+  // Entorno Vercel / Local directo a Google Apps Script
+  const targetUrl = API_URL; 
   
   for (let i = 0; i <= retries; i++) {
     try {
-      let response = await fetch(targetUrl, {
+      const response = await fetch(targetUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        // EL CAMBIO CRÍTICO: Usar text/plain para evitar el error CORS
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify({ action, data })
       });
-
-      // Si el proxy devuelve 404 (no encontrado), intentamos directamente al GAS
-      // como último recurso (aunque puede fallar por CORS en el navegador)
-      if (response.status === 404 && targetUrl !== API_URL) {
-        console.warn("Proxy /api/exec no encontrado, intentando fetch directo a GAS...");
-        targetUrl = API_URL;
-        response = await fetch(targetUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action, data })
-        });
-      }
 
       if (!response.ok) {
         throw new Error(`Error de Servidor: ${response.status}`);
