@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Calendar, ArrowUpCircle, ArrowDownCircle, Search, ClipboardList, Wallet, CheckCircle, Clock, AlertCircle, Edit, Trash2, X, Save, Eye, FileText } from 'lucide-react';
+import { Calendar, ArrowUpCircle, ArrowDownCircle, Search, ClipboardList, Wallet, CheckCircle, Clock, AlertCircle, Edit, Trash2, X, Save, Eye, FileText, RefreshCw } from 'lucide-react';
 import { dataService } from '../services/dataService';
 import { InputTransaction, OutputTransaction, DailyClosing, AuditLog, PurchaseNote } from '../types';
 import Modal from './Modal';
@@ -344,6 +344,24 @@ const HistoryView: React.FC = () => {
         message: 'Error al guardar: ' + error,
         type: 'error'
       });
+    }
+  };
+
+  const handleToggleNoteStatus = async (item: any) => {
+    const newStatus = item.status === 'Paid' ? 'Pending' : 'Paid';
+    const actionText = newStatus === 'Paid' 
+      ? `¿Marcar como PAGADO? Se descontarán $${item.totalAmount} del Sobre 4.` 
+      : `¿Marcar como DEUDA? Se regresarán $${item.totalAmount} al Sobre 4.`;
+
+    if (window.confirm(actionText)) {
+      try {
+        await dataService.updateNoteStatus(item.id, newStatus, 'Capital');
+        // Actualizar el estado local para que el modal refleje el cambio instantáneamente
+        setSelectedNote({ ...item, status: newStatus });
+      } catch (error) {
+        console.error("Error al cambiar estado:", error);
+        alert("Hubo un error al actualizar la base de datos.");
+      }
     }
   };
 
@@ -1221,11 +1239,20 @@ const HistoryView: React.FC = () => {
                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Fecha</label>
                   <p className="font-black text-slate-800">{new Date(selectedNote.date).toLocaleDateString()}</p>
                 </div>
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Estado</label>
-                  <p className={`font-black ${selectedNote.status === 'Paid' ? 'text-emerald-600' : 'text-amber-600'}`}>
-                    {selectedNote.status === 'Paid' ? 'LIQUIDADO' : 'PENDIENTE'}
-                  </p>
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">ESTADO</span>
+                  <div className="flex items-center gap-3">
+                    <span className={`text-sm font-black ${selectedNote.status === 'Paid' ? 'text-emerald-600' : 'text-amber-500'}`}>
+                      {selectedNote.status === 'Paid' ? 'LIQUIDADO' : 'PENDIENTE'}
+                    </span>
+                    <button
+                      onClick={() => handleToggleNoteStatus(selectedNote)}
+                      className="flex items-center justify-center p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-700 transition-colors"
+                      title="Cambiar estado de pago"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Nota</label>
