@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Camera, Check, AlertCircle, Loader2, ArrowLeft } from 'lucide-react';
 import { processTicketWithGemini } from '../services/geminiService';
 import { dataService } from '../services/dataService';
+import Modal from './Modal';
 
 const ProductRegistration: React.FC = () => {
   const location = useLocation();
@@ -11,6 +12,12 @@ const ProductRegistration: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [modalConfig, setModalConfig] = useState({ 
+    isOpen: false, 
+    type: 'success' as 'success' | 'error', 
+    title: '', 
+    message: '' 
+  });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleEnterPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -123,14 +130,30 @@ const ProductRegistration: React.FC = () => {
 
       await dataService.saveProduct(product);
       setSuccess(true);
+      
+      setModalConfig({
+        isOpen: true,
+        type: 'success',
+        title: editMode ? 'Producto Actualizado' : 'Producto Registrado',
+        message: editMode 
+          ? `Los cambios en ${product.name} se guardaron correctamente.`
+          : `${product.name} ha sido añadido al inventario.`
+      });
+
       if (editMode) {
-        setTimeout(() => navigate('/inventory'), 1500);
+        setTimeout(() => navigate('/inventory'), 2000);
       } else {
         setTimeout(() => setSuccess(false), 3000);
         setFormData({ id: '', code: '', name: '', grams: '', flavor: '', costPrice: '', salePrice: '', stock: '', category: 'General', provider: '' });
       }
     } catch (err) {
       setError("No se pudo guardar el producto.");
+      setModalConfig({
+        isOpen: true,
+        type: 'error',
+        title: 'Error al Guardar',
+        message: 'Hubo un problema al intentar procesar la solicitud. Por favor, intente de nuevo.'
+      });
     } finally {
       setIsLoading(false);
     }
@@ -285,6 +308,14 @@ const ProductRegistration: React.FC = () => {
           {success ? <Check size={24} className="md:w-8 md:h-8" /> : <span>{editMode ? 'Guardar Cambios' : 'Registrar en Inventario'}</span>}
         </button>
       </form>
+
+      <Modal 
+        isOpen={modalConfig.isOpen}
+        type={modalConfig.type}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        onClose={() => setModalConfig({ ...modalConfig, isOpen: false })}
+      />
     </div>
   );
 };
