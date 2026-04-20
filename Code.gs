@@ -1235,17 +1235,31 @@ function updateOutputQuantity(data) {
     var idIndex = headers.indexOf('id');
     var qtyIndex = headers.indexOf('quantity');
     var totalIndex = headers.indexOf('totalSale');
-    var hiddenJsonIndex = headers.indexOf(''); 
-    if (hiddenJsonIndex === -1) hiddenJsonIndex = headers.indexOf('soldProductsJson');
     
     for (var i = 1; i < values.length; i++) {
       if (values[i][idIndex] === data.outputId) {
+        
+        // 1. BÚSQUEDA DINÁMICA DEL JSON (A prueba de balas)
+        var hiddenJsonIndex = -1;
+        for (var c = 0; c < values[i].length; c++) {
+          if (typeof values[i][c] === 'string' && values[i][c].includes('productId') && values[i][c].indexOf('[') !== -1) {
+            hiddenJsonIndex = c;
+            break;
+          }
+        }
+
+        var oldQty = 0;
+        var oldTotalSale = 0;
+
         // Caso A: Es un JSON (Cierre Maestro o Batch)
-        if (hiddenJsonIndex !== -1 && String(values[i][hiddenJsonIndex]).includes('productId')) {
+        if (hiddenJsonIndex !== -1) {
           var items = JSON.parse(values[i][hiddenJsonIndex]);
           var newTotalSale = 0;
+          
           for (var j = 0; j < items.length; j++) {
-            if (items[j].productId === data.productId) {
+            if (String(items[j].productId) === String(data.productId)) {
+              oldQty = Number(items[j].quantity || 0);
+              oldTotalSale = Number(items[j].totalSale || 0);
               items[j].quantity = data.newQty;
               items[j].totalSale = data.newTotal;
             }
@@ -1256,9 +1270,18 @@ function updateOutputQuantity(data) {
         } 
         // Caso B: Es una salida individual
         else {
+          oldQty = Number(values[i][qtyIndex] || 0);
+          oldTotalSale = Number(values[i][totalIndex] || 0);
           sheet.getRange(i + 1, qtyIndex + 1).setValue(data.newQty);
           sheet.getRange(i + 1, totalIndex + 1).setValue(data.newTotal);
         }
+
+        // 2. ACTUALIZAR INVENTARIO EN EL BACKEND
+        var diffQty = data.newQty - oldQty;
+        var diffSale = data.newTotal - oldTotalSale;
+        // false = salida (restará el diffQty al stock si es positivo)
+        updateProductStock(data.productId, diffQty, diffSale, false);
+
         return { success: true };
       }
     }
