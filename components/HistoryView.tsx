@@ -17,6 +17,7 @@ const HistoryView: React.FC = () => {
   const [isEditingDetails, setIsEditingDetails] = useState(false);
   const [editedDetails, setEditedDetails] = useState<any[]>([]);
   const [editQuantities, setEditQuantities] = useState<Record<string, number>>({});
+  const [expandedDebtId, setExpandedDebtId] = useState<string | null>(null);
   
   // Modal state
   const [modal, setModal] = useState<{
@@ -36,6 +37,7 @@ const HistoryView: React.FC = () => {
   const closings = dataService.getClosings();
   const priceHistory = dataService.getAudits();
   const purchaseNotes = dataService.getPurchaseNotes();
+  const allProducts = dataService.getProducts();
 
   const filterAndSort = <T extends { date: string }>(data: T[], searchFields: (keyof T)[]) => {
     let filtered = [...data];
@@ -81,37 +83,45 @@ const HistoryView: React.FC = () => {
   const totalClosingsCash = useMemo(() => sortedClosings.reduce((acc, curr) => acc + (Number(curr.cashInBox || curr.totalSold) || 0), 0), [sortedClosings]);
 
   // --- LÓGICA DE EXTRACCIÓN PARA CIERRES ---
-  const allProducts = dataService.getProducts();
   let closingProducts: any[] = [];
   let closingDebts: any[] = [];
   let envelopeSummary = { env123: 0, env4: 0 };
 
   if (selectedDetail && tab === 'Closings') {
-    // 1. Extraer Productos cruzando con Outputs
-    const matchingOutput = outputs.find(out => String(out.notes).includes(selectedDetail.id));
+    const allOutputs = dataService.getOutputs();
+    const allNotes = dataService.getPurchaseNotes();
+
+    // 1. Extraer Productos (Búsqueda por Nota o Coincidencia Exacta de Fecha)
+    const matchingOutput = allOutputs.find(out => 
+      (out.notes && String(out.notes).includes(selectedDetail.id)) || 
+      out.date === selectedDetail.date
+    );
+
     if (matchingOutput) {
-      const rawProds = matchingOutput.soldProductsJson || (matchingOutput as any).detailsJson || (matchingOutput as any)[""] || '[]';
+      const rawProds = matchingOutput.soldProductsJson || (matchingOutput as any)[""] || '[]';
       try { 
-        closingProducts = JSON.parse(rawProds);
-        // Asegurar nombres de productos si no vienen en el JSON
-        closingProducts = closingProducts.map((p: any) => {
-          if (!p.productName) {
-            const def = allProducts.find((ap: any) => ap.id === p.productId);
-            return { ...p, productName: def ? def.name : 'Producto Eliminado' };
-          }
-          return p;
+        const parsed = JSON.parse(rawProds);
+        // Asegurar que tengan nombre cruzando con el catálogo
+        closingProducts = parsed.map((p: any) => {
+          const def = allProducts.find(x => String(x.id) === String(p.productId));
+          return {
+            ...p,
+            productName: def ? def.name : (p.productName || 'Producto Editado')
+          };
         });
-      } catch (e) {}
+      } catch (e) { console.warn("Error parseando productos:", e); }
     }
 
-    // 2. Extraer Deudas Pagadas
+    // 2. Extraer Deudas Pagadas (Si las hubo DURANTE el corte)
     try {
-      const rawDebtIds = selectedDetail.paidDebtIds || '[]';
-      const debtIds = typeof rawDebtIds === 'string' ? JSON.parse(rawDebtIds) : rawDebtIds;
-      closingDebts = debtIds.map((id: string) => {
-        const note = purchaseNotes.find(n => n.id === id);
-        return note ? note : { id, provider: 'Desconocido', totalAmount: 0 };
-      });
+      const rawDebts = selectedDetail.paidDebtIds || (selectedDetail as any)[""] || '[]';
+      const debtIds = typeof rawDebts === 'string' ? JSON.parse(rawDebts) : rawDebts;
+      if (Array.isArray(debtIds)) {
+        closingDebts = debtIds.map((id: string) => {
+          const note = allNotes.find(n => n.id === id);
+          return note ? note : { id, provider: 'Nota Antigua / Eliminada', totalAmount: 0 };
+        }).filter(d => Number(d.totalAmount) > 0);
+      }
     } catch(e) {}
 
     // 3. Calcular Distribución de Sobres
@@ -121,7 +131,7 @@ const HistoryView: React.FC = () => {
     
     envelopeSummary = {
       env123: netProfit > 0 ? netProfit / 3 : 0,
-      env4: cogs - totalDebtsAmount // El capital recuperado menos las deudas pagadas con ese capital
+      env4: cogs - totalDebtsAmount
     };
   }
 
@@ -960,7 +970,7 @@ const HistoryView: React.FC = () => {
                   {new Date(selectedDetail.date).toLocaleString()}
                 </p>
               </div>
-              <button onClick={() => setSelectedDetail(null)} className="text-white/70 hover:text-white transition-colors">
+              <button onClick={() => { setSelectedDetail(null); setExpandedDebtId(null); }} className="text-white/70 hover:text-white transition-colors">
                 <X size={24} />
               </button>
             </div>
@@ -1038,14 +1048,65 @@ const HistoryView: React.FC = () => {
                   {/* DEUDAS PAGADAS */}
                   {closingDebts.length > 0 && (
                     <div className="mt-6">
-                      <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">DEUDAS LIQUIDADAS</h3>
+                      <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">
+                        DEUDAS LIQUIDADAS <span className="text-slate-300 normal-case font-medium">(Clic para ver nota)</span>
+                      </h3>
                       <div className="grid gap-2">
-                        {closingDebts.map((debt: any, idx: number) => (
-                          <div key={idx} className="flex justify-between items-center bg-amber-50 p-3 rounded-lg border border-amber-100">
-                            <span className="text-sm font-bold text-amber-800">{debt.provider}</span>
-                            <span className="text-sm font-black text-amber-600">-${Number(debt.totalAmount).toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
-                          </div>
-                        ))}
+                        {closingDebts.map((debt: any, idx: number) => {
+                          const isExpanded = expandedDebtId === debt.id;
+                          let noteDetails: any[] = [];
+                          if (isExpanded) {
+                            try { noteDetails = JSON.parse(debt.detailsJson || '[]'); } catch(e) {}
+                          }
+                          
+                          return (
+                            <div key={idx} className="flex flex-col bg-amber-50 rounded-lg border border-amber-100 overflow-hidden transition-all">
+                              {/* Franja clickeable */}
+                              <div 
+                                className="flex justify-between items-center p-3 cursor-pointer hover:bg-amber-100/50 transition-colors"
+                                onClick={() => setExpandedDebtId(isExpanded ? null : debt.id)}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <span className="text-amber-500 font-bold text-xs">{isExpanded ? '▼' : '▶'}</span>
+                                  <span className="text-sm font-bold text-amber-800">{debt.provider}</span>
+                                </div>
+                                <span className="text-sm font-black text-amber-600">
+                                  -${Number(debt.totalAmount).toLocaleString('en-US', {minimumFractionDigits: 2})}
+                                </span>
+                              </div>
+                              
+                              {/* Detalle Expandible */}
+                              {isExpanded && (
+                                <div className="p-3 bg-white/60 border-t border-amber-100/50">
+                                  {noteDetails.length > 0 ? (
+                                    <table className="w-full text-left">
+                                      <thead>
+                                        <tr>
+                                          <th className="pb-2 text-[10px] font-black text-amber-700/70 uppercase">Cant</th>
+                                          <th className="pb-2 text-[10px] font-black text-amber-700/70 uppercase">Producto</th>
+                                          <th className="pb-2 text-[10px] font-black text-amber-700/70 uppercase text-right">Costo</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {noteDetails.map((item: any, i: number) => (
+                                          <tr key={i} className="border-b border-amber-100/30 last:border-0">
+                                            <td className="py-1.5 text-xs font-bold text-amber-900">{item.quantity}</td>
+                                            <td className="py-1.5 text-xs font-medium text-amber-800">{item.productName}</td>
+                                            <td className="py-1.5 text-xs font-black text-amber-700 text-right">
+                                              ${Number(item.totalCost).toLocaleString('en-US', {minimumFractionDigits: 2})}
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  ) : (
+                                    <p className="text-xs text-amber-600 italic text-center py-2">Nota sin productos detallados.</p>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -1288,7 +1349,7 @@ const HistoryView: React.FC = () => {
             
             <div className="p-6 bg-slate-50 border-t border-slate-100">
               <button 
-                onClick={() => setSelectedDetail(null)}
+                onClick={() => { setSelectedDetail(null); setExpandedDebtId(null); }}
                 className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black hover:bg-slate-800 transition-all shadow-xl shadow-slate-200 uppercase tracking-widest text-xs"
               >
                 Cerrar Detalle
