@@ -86,6 +86,7 @@ const HistoryView: React.FC = () => {
   let closingProducts: any[] = [];
   let closingDebts: any[] = [];
   let envelopeSummary = { env123: 0, env4: 0 };
+  let totalDebtsAmount = 0;
 
   if (selectedDetail && tab === 'Closings') {
     const allOutputs = dataService.getOutputs();
@@ -127,7 +128,7 @@ const HistoryView: React.FC = () => {
     // 3. Calcular Distribución de Sobres
     const netProfit = Number(selectedDetail.netProfit) || 0;
     const cogs = Number(selectedDetail.cogs) || 0;
-    const totalDebtsAmount = closingDebts.reduce((sum, d) => sum + (Number(d.totalAmount) || 0), 0);
+    totalDebtsAmount = closingDebts.reduce((sum, d) => sum + (Number(d.totalAmount) || 0), 0);
     
     envelopeSummary = {
       env123: netProfit > 0 ? netProfit / 3 : 0,
@@ -1107,6 +1108,14 @@ const HistoryView: React.FC = () => {
                             </div>
                           );
                         })}
+
+                        {/* FILA DE TOTAL ABONADO */}
+                        <div className="flex justify-between items-center bg-amber-100 p-3 rounded-lg border border-amber-200 mt-2 shadow-sm">
+                          <span className="text-sm font-black text-amber-900 tracking-wide">TOTAL ABONADO EN ESTE CORTE</span>
+                          <span className="text-base font-black text-amber-700">
+                            -${totalDebtsAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   )}
