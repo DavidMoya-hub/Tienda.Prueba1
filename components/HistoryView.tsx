@@ -80,61 +80,50 @@ const HistoryView: React.FC = () => {
   const totalClosingsDebts = useMemo(() => sortedClosings.reduce((acc, curr) => acc + (Number(curr.debtsPaid) || 0), 0), [sortedClosings]);
   const totalClosingsCash = useMemo(() => sortedClosings.reduce((acc, curr) => acc + (Number(curr.cashInBox || curr.totalSold) || 0), 0), [sortedClosings]);
 
-  // --- LÓGICA DE EXTRACCIÓN DUAL PARA CIERRES ---
-  const allOutputs = dataService.getOutputs();
-  const allPurchaseNotes = dataService.getPurchaseNotes();
+  // --- LÓGICA DE EXTRACCIÓN PARA CIERRES ---
   const allProducts = dataService.getProducts();
+  let closingProducts: any[] = [];
+  let closingDebts: any[] = [];
+  let envelopeSummary = { env123: 0, env4: 0 };
 
-  let closingProducts: { productName: string, quantity: number, totalSale: number, unitPrice: number }[] = [];
-  let closingDebts: { id: string, supplier: string, total: number }[] = [];
-
-  if (selectedDetail && (tab === 'Closings' || (selectedDetail as any).totalSold !== undefined)) {
-    const closing = selectedDetail as DailyClosing;
-    // --- A. EXTRAER DEUDAS PAGADAS DEL CIERRE ---
-    try {
-      const rawDebts = closing.paidDebtIds || (closing as any).paidDebts || '[]';
-      if (typeof rawDebts === 'string' && rawDebts.includes('NOTE-')) {
-        const debtIds = JSON.parse(rawDebts);
-        closingDebts = debtIds.map((id: string) => {
-          const note = allPurchaseNotes.find(n => n.id === id);
-          return {
-            id: id,
-            supplier: note ? note.provider : 'Proveedor Desconocido',
-            total: note ? note.totalAmount : 0
-          };
-        });
-      }
-    } catch (e) { console.warn("Error parseando deudas:", e); }
-
-    // --- B. EXTRAER PRODUCTOS CRUZANDO CON OUTPUTS ---
-    const matchingOutput = allOutputs.find(out => 
-      out.date === closing.date || 
-      String(out.notes).includes(closing.id)
-    );
-
+  if (selectedDetail && tab === 'Closings') {
+    // 1. Extraer Productos cruzando con Outputs
+    const matchingOutput = outputs.find(out => String(out.notes).includes(selectedDetail.id));
     if (matchingOutput) {
-      try {
-        const rawProds = matchingOutput.soldProductsJson || (matchingOutput as any).detailsJson || '[]';
-        if (typeof rawProds === 'string' && rawProds.includes('productId')) {
-          const parsedProds = JSON.parse(rawProds);
-          closingProducts = parsedProds.map((item: any) => {
-            const productDef = allProducts.find(p => p.id === item.productId);
-            const qty = Number(item.quantity || 1);
-            const total = Number(item.totalSale || item.totalCost || 0);
-            return {
-              productName: productDef ? productDef.name : 'Producto Eliminado',
-              quantity: qty,
-              totalSale: total,
-              unitPrice: total / qty
-            };
-          });
-        }
-      } catch (e) { console.warn("Error parseando productos desde output:", e); }
+      const rawProds = matchingOutput.soldProductsJson || (matchingOutput as any).detailsJson || (matchingOutput as any)[""] || '[]';
+      try { 
+        closingProducts = JSON.parse(rawProds);
+        // Asegurar nombres de productos si no vienen en el JSON
+        closingProducts = closingProducts.map((p: any) => {
+          if (!p.productName) {
+            const def = allProducts.find((ap: any) => ap.id === p.productId);
+            return { ...p, productName: def ? def.name : 'Producto Eliminado' };
+          }
+          return p;
+        });
+      } catch (e) {}
     }
-  }
 
-  const totalClosingProducts = closingProducts.reduce((acc, p) => acc + (p.totalSale || 0), 0);
-  const totalClosingDebts = closingDebts.reduce((acc, d) => acc + (d.total || 0), 0);
+    // 2. Extraer Deudas Pagadas
+    try {
+      const rawDebtIds = selectedDetail.paidDebtIds || '[]';
+      const debtIds = typeof rawDebtIds === 'string' ? JSON.parse(rawDebtIds) : rawDebtIds;
+      closingDebts = debtIds.map((id: string) => {
+        const note = purchaseNotes.find(n => n.id === id);
+        return note ? note : { id, provider: 'Desconocido', totalAmount: 0 };
+      });
+    } catch(e) {}
+
+    // 3. Calcular Distribución de Sobres
+    const netProfit = Number(selectedDetail.netProfit) || 0;
+    const cogs = Number(selectedDetail.cogs) || 0;
+    const totalDebtsAmount = closingDebts.reduce((sum, d) => sum + (Number(d.totalAmount) || 0), 0);
+    
+    envelopeSummary = {
+      env123: netProfit > 0 ? netProfit / 3 : 0,
+      env4: cogs - totalDebtsAmount // El capital recuperado menos las deudas pagadas con ese capital
+    };
+  }
 
   useEffect(() => {
     if (selectedDetail) {
@@ -1013,77 +1002,76 @@ const HistoryView: React.FC = () => {
 
               {selectedDetail.totalSold !== undefined ? (
                 <>
-                  {/* SECCIÓN 1: PRODUCTOS VENDIDOS */}
-                  <div className="mt-6 flex items-center gap-2 mb-3">
-                    <FileText className="w-4 h-4 text-slate-400" />
-                    <h4 className="text-xs font-black text-slate-800 tracking-wider uppercase">Desglose de Productos</h4>
-                  </div>
-                  <div className="bg-slate-50 rounded-xl overflow-hidden border border-slate-100">
-                    <table className="w-full text-left">
-                      <thead className="bg-slate-50 text-slate-400 font-black uppercase tracking-widest">
-                        <tr>
-                          <th className="px-4 py-3 text-[10px]">Producto</th>
-                          <th className="px-4 py-3 text-[10px] text-center">Cant</th>
-                          <th className="px-4 py-3 text-[10px] text-right">Precio</th>
-                          <th className="px-4 py-3 text-[10px] text-right">Total</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {closingProducts.length > 0 ? (
-                          closingProducts.map((prod, idx) => (
-                            <tr key={idx} className="border-b border-slate-100 hover:bg-white">
-                              <td className="p-3 text-sm font-bold text-slate-700">{prod.productName}</td>
-                              <td className="p-3 text-sm font-medium text-slate-600 text-center">{prod.quantity}</td>
-                              <td className="p-3 text-sm font-medium text-slate-600 text-right">${prod.unitPrice.toLocaleString()}</td>
-                              <td className="p-3 text-sm font-black text-slate-800 text-right">${prod.totalSale.toLocaleString()}</td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr><td colSpan={4} className="p-4 text-center text-sm text-slate-400 italic">No se encontraron productos para este cierre.</td></tr>
-                        )}
-                        {closingProducts.length > 0 && (
-                          <tr className="bg-slate-100/50 border-t-2 border-slate-200">
-                            <td colSpan={3} className="p-3 text-right text-[10px] font-black text-slate-500 uppercase tracking-widest">Total Productos</td>
-                            <td className="p-3 text-sm font-black text-blue-600 text-right">${totalClosingProducts.toLocaleString()}</td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* SECCIÓN 2: DEUDAS PAGADAS (SOLO SI HAY DEUDAS) */}
-                  {closingDebts.length > 0 && (
-                    <>
-                      <div className="mt-6 flex items-center gap-2 mb-3">
-                        <CheckCircle className="w-4 h-4 text-emerald-500" />
-                        <h4 className="text-xs font-black text-slate-800 tracking-wider uppercase">Deudas Liquidadas</h4>
-                      </div>
-                      <div className="bg-emerald-50 rounded-xl overflow-hidden border border-emerald-100">
+                  {/* DESGLOSE DE PRODUCTOS */}
+                  <div className="mt-6">
+                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                      PRODUCTOS VENDIDOS
+                    </h3>
+                    {closingProducts.length > 0 ? (
+                      <div className="bg-slate-50 rounded-xl overflow-hidden border border-slate-100">
                         <table className="w-full text-left">
-                          <thead className="bg-emerald-100/50">
+                          <thead className="bg-slate-100/50">
                             <tr>
-                              <th className="p-3 text-[10px] font-bold text-emerald-800 uppercase tracking-wider">ID Deuda</th>
-                              <th className="p-3 text-[10px] font-bold text-emerald-800 uppercase tracking-wider">Proveedor</th>
-                              <th className="p-3 text-[10px] font-bold text-emerald-800 uppercase tracking-wider text-right">Monto Pagado</th>
+                              <th className="p-3 text-[10px] font-black text-slate-400 uppercase">Producto</th>
+                              <th className="p-3 text-[10px] font-black text-slate-400 uppercase text-center">Cant</th>
+                              <th className="p-3 text-[10px] font-black text-slate-400 uppercase text-right">Total</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {closingDebts.map((debt, idx) => (
-                              <tr key={idx} className="border-b border-emerald-100/50 hover:bg-emerald-100/30">
-                                <td className="p-3 text-sm font-medium text-slate-600">{debt.id}</td>
-                                <td className="p-3 text-sm font-bold text-slate-700">{debt.supplier}</td>
-                                <td className="p-3 text-sm font-black text-emerald-600 text-right">${debt.total.toLocaleString()}</td>
+                            {closingProducts.map((prod: any, idx: number) => (
+                              <tr key={idx} className="border-b border-slate-100 last:border-0">
+                                <td className="p-3 text-sm font-bold text-slate-700">{prod.productName}</td>
+                                <td className="p-3 text-sm font-medium text-slate-600 text-center">{prod.quantity}</td>
+                                <td className="p-3 text-sm font-black text-slate-800 text-right">
+                                  ${Number(prod.totalSale).toLocaleString('en-US', {minimumFractionDigits: 2})}
+                                </td>
                               </tr>
                             ))}
-                            <tr className="bg-emerald-100/30 border-t-2 border-emerald-200">
-                              <td colSpan={2} className="p-3 text-right text-[10px] font-black text-emerald-800 uppercase tracking-widest">Total Deudas Liquidadas</td>
-                              <td className="p-3 text-sm font-black text-emerald-700 text-right">${totalClosingDebts.toLocaleString()}</td>
-                            </tr>
                           </tbody>
                         </table>
                       </div>
-                    </>
+                    ) : (
+                      <p className="text-sm text-slate-500 italic text-center p-4 bg-slate-50 rounded-xl">No se pudieron cargar los productos de este cierre.</p>
+                    )}
+                  </div>
+
+                  {/* DEUDAS PAGADAS */}
+                  {closingDebts.length > 0 && (
+                    <div className="mt-6">
+                      <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">DEUDAS LIQUIDADAS</h3>
+                      <div className="grid gap-2">
+                        {closingDebts.map((debt: any, idx: number) => (
+                          <div key={idx} className="flex justify-between items-center bg-amber-50 p-3 rounded-lg border border-amber-100">
+                            <span className="text-sm font-bold text-amber-800">{debt.provider}</span>
+                            <span className="text-sm font-black text-amber-600">-${Number(debt.totalAmount).toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   )}
+
+                  {/* RESUMEN DE SOBRES */}
+                  <div className="mt-6">
+                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">DISTRIBUCIÓN EN SOBRES</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <div className="bg-emerald-50 border border-emerald-100 p-3 rounded-xl flex flex-col items-center justify-center">
+                        <span className="text-[10px] font-bold text-emerald-600 uppercase text-center">1. Operativo</span>
+                        <span className="text-sm font-black text-emerald-700">${envelopeSummary.env123.toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
+                      </div>
+                      <div className="bg-emerald-50 border border-emerald-100 p-3 rounded-xl flex flex-col items-center justify-center">
+                        <span className="text-[10px] font-bold text-emerald-600 uppercase text-center">2. Ahorro</span>
+                        <span className="text-sm font-black text-emerald-700">${envelopeSummary.env123.toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
+                      </div>
+                      <div className="bg-emerald-50 border border-emerald-100 p-3 rounded-xl flex flex-col items-center justify-center">
+                        <span className="text-[10px] font-bold text-emerald-600 uppercase text-center">3. Ganancia</span>
+                        <span className="text-sm font-black text-emerald-700">${envelopeSummary.env123.toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
+                      </div>
+                      <div className="bg-blue-50 border border-blue-100 p-3 rounded-xl flex flex-col items-center justify-center">
+                        <span className="text-[10px] font-bold text-blue-600 uppercase text-center">4. Capital</span>
+                        <span className="text-sm font-black text-blue-700">${envelopeSummary.env4.toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
+                      </div>
+                    </div>
+                  </div>
                 </>
               ) : (
                 <div className="space-y-4">
@@ -1118,7 +1106,7 @@ const HistoryView: React.FC = () => {
                                 
                                 // 3. Enriquecer el array mapeando el ID con el nombre real
                                 outputProducts = parsed.map((item: any) => {
-                                  const productDef = allProducts.find(p => p.id === item.productId);
+                                  const productDef = allProducts.find((p: any) => p.id === item.productId);
                                   const qty = Number(item.quantity || 1);
                                   const total = Number(item.totalSale || item.totalCost || 0);
                                   
