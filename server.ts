@@ -51,7 +51,7 @@ async function startServer() {
   app.use(cors());
   app.use(express.json());
 
-  const API_URL = "https://script.google.com/macros/s/AKfycbw4HfHMz7susMssRvl4K2rgkjOokq_0uPF813z5PI6DYhN9KIeY38wVl43jNhvjtubWgw/exec";
+  const API_URL = "https://script.google.com/macros/s/AKfycbylpen61tEcRcLo0JLHvAdKhS2Sq6b-KyZUgIW2Bpu5bWKsGEFzVOTcX3lPTchnTB9gmg/exec";
 
   // API Routes
   app.post("/api/exec", async (req, res) => {
