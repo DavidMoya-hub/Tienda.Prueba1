@@ -83,6 +83,7 @@ function doPost(e) {
       case 'deletePurchaseNote': result = deletePurchaseNote(extractId(data)); break;
       
       case 'setup': result = setupSheet(); break;
+      case 'updateOutputQuantity': return createResponse(updateOutputQuantity(data));
       default: throw new Error("Acción no reconocida: " + action);
     }
     return createResponse(result);
@@ -1223,6 +1224,46 @@ function deleteItemFromPurchaseNote(data) {
     sheet.getRange(foundRow, detailsIdx + 1).setValue(JSON.stringify(newDetails));
     return { success: true, destroyed: false, newTotalAmount, newDetailsJson: JSON.stringify(newDetails) };
   }
+}
+
+function updateOutputQuantity(data) {
+  try {
+    var sheet = getSheet('Outputs');
+    var values = sheet.getDataRange().getValues();
+    var headers = values[0];
+    
+    var idIndex = headers.indexOf('id');
+    var qtyIndex = headers.indexOf('quantity');
+    var totalIndex = headers.indexOf('totalSale');
+    var hiddenJsonIndex = headers.indexOf(''); 
+    if (hiddenJsonIndex === -1) hiddenJsonIndex = headers.indexOf('soldProductsJson');
+    
+    for (var i = 1; i < values.length; i++) {
+      if (values[i][idIndex] === data.outputId) {
+        // Caso A: Es un JSON (Cierre Maestro o Batch)
+        if (hiddenJsonIndex !== -1 && String(values[i][hiddenJsonIndex]).includes('productId')) {
+          var items = JSON.parse(values[i][hiddenJsonIndex]);
+          var newTotalSale = 0;
+          for (var j = 0; j < items.length; j++) {
+            if (items[j].productId === data.productId) {
+              items[j].quantity = data.newQty;
+              items[j].totalSale = data.newTotal;
+            }
+            newTotalSale += Number(items[j].totalSale || items[j].price || 0);
+          }
+          sheet.getRange(i + 1, hiddenJsonIndex + 1).setValue(JSON.stringify(items));
+          sheet.getRange(i + 1, totalIndex + 1).setValue(newTotalSale);
+        } 
+        // Caso B: Es una salida individual
+        else {
+          sheet.getRange(i + 1, qtyIndex + 1).setValue(data.newQty);
+          sheet.getRange(i + 1, totalIndex + 1).setValue(data.newTotal);
+        }
+        return { success: true };
+      }
+    }
+    throw new Error("Salida no encontrada");
+  } catch(e) { return { error: e.toString() }; }
 }
 
 function setupSheet() {

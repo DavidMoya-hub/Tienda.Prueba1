@@ -16,6 +16,7 @@ const HistoryView: React.FC = () => {
   const [selectedDetail, setSelectedDetail] = useState<any>(null);
   const [isEditingDetails, setIsEditingDetails] = useState(false);
   const [editedDetails, setEditedDetails] = useState<any[]>([]);
+  const [editQuantities, setEditQuantities] = useState<Record<string, number>>({});
   
   // Modal state
   const [modal, setModal] = useState<{
@@ -1099,6 +1100,7 @@ const HistoryView: React.FC = () => {
                           <th className="px-4 py-3 text-center">Cant</th>
                           <th className="px-4 py-3 text-right">Precio</th>
                           <th className="px-4 py-3 text-right">Total</th>
+                          <th className="px-4 py-3 text-center">Acción</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-50">
@@ -1121,6 +1123,7 @@ const HistoryView: React.FC = () => {
                                   const total = Number(item.totalSale || item.totalCost || 0);
                                   
                                   return {
+                                    productId: item.productId,
                                     productName: productDef ? productDef.name : 'Producto Eliminado/Desconocido',
                                     quantity: qty,
                                     totalSale: total,
@@ -1134,26 +1137,74 @@ const HistoryView: React.FC = () => {
                           }
 
                           if (outputProducts.length > 0) {
-                            const totalOutputProducts = outputProducts.reduce((acc: number, p: any) => acc + (p.totalSale || 0), 0);
                             return (
                               <>
-                                {outputProducts.map((prod: any, idx: number) => (
-                                  <tr key={idx} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
-                                    <td className="px-4 py-3 font-bold text-slate-700">{prod.productName}</td>
-                                    <td className="px-4 py-3 text-center font-black text-blue-600">
-                                      <span className="bg-blue-50 px-2 py-0.5 rounded-md">{prod.quantity}</span>
-                                    </td>
-                                    <td className="px-4 py-3 text-right text-slate-500">
-                                      ${prod.unitPrice.toLocaleString()}
-                                    </td>
-                                    <td className="px-4 py-3 text-right font-black text-slate-900">
-                                      ${prod.totalSale.toLocaleString()}
-                                    </td>
-                                  </tr>
-                                ))}
+                                {outputProducts.map((prod: any, idx: number) => {
+                                  const currentQty = editQuantities[prod.productId] !== undefined ? editQuantities[prod.productId] : prod.quantity;
+                                  const unitPrice = prod.unitPrice || (prod.totalSale / prod.quantity);
+                                  const currentTotal = currentQty * unitPrice;
+                                  const isEdited = currentQty !== prod.quantity;
+
+                                  return (
+                                    <tr key={idx} className={`border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors ${isEdited ? 'bg-amber-50/50' : ''}`}>
+                                      <td className="px-4 py-3 font-bold text-slate-700">{prod.productName}</td>
+                                      <td className="px-4 py-3 text-center">
+                                        <input 
+                                          type="number" 
+                                          min="0"
+                                          value={currentQty}
+                                          onChange={(e) => setEditQuantities({...editQuantities, [prod.productId]: Number(e.target.value)})}
+                                          className="w-16 text-center border border-slate-300 rounded-md p-1 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                                        />
+                                      </td>
+                                      <td className="px-4 py-3 text-right text-slate-500">
+                                        ${unitPrice.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                      </td>
+                                      <td className="px-4 py-3 text-right font-black text-slate-900">
+                                        ${currentTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                      </td>
+                                      <td className="px-4 py-3 text-center">
+                                        {isEdited && (
+                                          <button 
+                                            onClick={async () => {
+                                              try {
+                                                const res = await dataService.updateOutputQuantity(
+                                                  selectedDetail.id, 
+                                                  prod.productId, 
+                                                  prod.quantity, 
+                                                  currentQty, 
+                                                  unitPrice
+                                                );
+                                                if (res && res.success) {
+                                                  setEditQuantities(prev => { 
+                                                    const copy = {...prev}; 
+                                                    delete copy[prod.productId]; 
+                                                    return copy; 
+                                                  });
+                                                  alert("Cantidad actualizada e inventario ajustado.");
+                                                }
+                                              } catch (err) {
+                                                alert("Error al actualizar la cantidad.");
+                                              }
+                                            }}
+                                            className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold py-1 px-2 rounded transition-colors"
+                                          >
+                                            Guardar
+                                          </button>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
                                 <tr className="bg-slate-100/50 border-t-2 border-slate-200">
                                   <td colSpan={3} className="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase tracking-widest">Total Salida</td>
-                                  <td className="px-4 py-3 text-right font-black text-emerald-600 text-sm">${totalOutputProducts.toLocaleString()}</td>
+                                  <td className="px-4 py-3 text-right font-black text-emerald-600 text-sm">
+                                    ${outputProducts.reduce((acc: number, p: any) => {
+                                      const q = editQuantities[p.productId] !== undefined ? editQuantities[p.productId] : p.quantity;
+                                      return acc + (q * p.unitPrice);
+                                    }, 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                  </td>
+                                  <td></td>
                                 </tr>
                               </>
                             );
@@ -1161,24 +1212,72 @@ const HistoryView: React.FC = () => {
 
                           // Fallback para salidas manuales antiguas sin JSON
                           if (selectedDetail && selectedDetail.totalSold === undefined) {
+                            const prod = {
+                              productId: selectedDetail.productId,
+                              productName: selectedDetail.productName || 'Desconocido',
+                              quantity: selectedDetail.quantity || 0,
+                              unitPrice: Number(selectedDetail.salePrice || 0),
+                              totalSale: Number(selectedDetail.totalSale || 0)
+                            };
+                            
+                            const currentQty = editQuantities[prod.productId] !== undefined ? editQuantities[prod.productId] : prod.quantity;
+                            const currentTotal = currentQty * prod.unitPrice;
+                            const isEdited = currentQty !== prod.quantity;
+
                             return (
-                              <tr className="hover:bg-slate-50/50 transition-colors">
-                                <td className="px-4 py-3 font-bold text-slate-700">{selectedDetail.productName || 'Desconocido'}</td>
-                                <td className="px-4 py-3 text-center font-black text-blue-600">
-                                  <span className="bg-blue-50 px-2 py-0.5 rounded-md">{selectedDetail.quantity || 0}</span>
+                              <tr className={`hover:bg-slate-50/50 transition-colors ${isEdited ? 'bg-amber-50/50' : ''}`}>
+                                <td className="px-4 py-3 font-bold text-slate-700">{prod.productName}</td>
+                                <td className="px-4 py-3 text-center">
+                                  <input 
+                                    type="number" 
+                                    min="0"
+                                    value={currentQty}
+                                    onChange={(e) => setEditQuantities({...editQuantities, [prod.productId]: Number(e.target.value)})}
+                                    className="w-16 text-center border border-slate-300 rounded-md p-1 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                                  />
                                 </td>
                                 <td className="px-4 py-3 text-right text-slate-500">
-                                  ${Number(selectedDetail.salePrice || 0).toLocaleString()}
+                                  ${prod.unitPrice.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                                 </td>
                                 <td className="px-4 py-3 text-right font-black text-slate-900">
-                                  ${Number(selectedDetail.totalSale || 0).toLocaleString()}
+                                  ${currentTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  {isEdited && (
+                                    <button 
+                                      onClick={async () => {
+                                        try {
+                                          const res = await dataService.updateOutputQuantity(
+                                            selectedDetail.id, 
+                                            prod.productId, 
+                                            prod.quantity, 
+                                            currentQty, 
+                                            prod.unitPrice
+                                          );
+                                          if (res && res.success) {
+                                            setEditQuantities(prev => { 
+                                              const copy = {...prev}; 
+                                              delete copy[prod.productId]; 
+                                              return copy; 
+                                            });
+                                            alert("Cantidad actualizada e inventario ajustado.");
+                                          }
+                                        } catch (err) {
+                                          alert("Error al actualizar la cantidad.");
+                                        }
+                                      }}
+                                      className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold py-1 px-2 rounded transition-colors"
+                                    >
+                                      Guardar
+                                    </button>
+                                  )}
                                 </td>
                               </tr>
                             );
                           } else {
                             return (
                               <tr>
-                                <td colSpan={4} className="px-4 py-8 text-center text-slate-400 font-bold italic">
+                                <td colSpan={5} className="px-4 py-8 text-center text-slate-400 font-bold italic">
                                   No se encontraron detalles desglosados para este registro.
                                 </td>
                               </tr>

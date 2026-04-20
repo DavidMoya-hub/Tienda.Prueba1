@@ -831,5 +831,31 @@ export const dataService = {
       netProfit: totalSold - totalCOGS
     };
   },
+  async updateOutputQuantity(outputId: string, productId: string, oldQty: number, newQty: number, unitPrice: number) {
+    const diffQty = newQty - oldQty; // Positivo si subió, Negativo si bajó
+    const newTotal = newQty * unitPrice;
+    const diffSale = (newQty * unitPrice) - (oldQty * unitPrice);
+
+    const res = await runGas('updateOutputQuantity', { outputId, productId, newQty, newTotal });
+    
+    if (res && res.success) {
+      // 1. Actualizar Stock e Ingresos (Products) Inversamente a la venta
+      this._products = this._products.map(p => {
+        if (String(p.id) === String(productId)) {
+          return {
+            ...p,
+            stock: (Number(p.stock) || 0) - diffQty, // Si vendió más, resta stock. Si vendió menos, suma stock.
+            totalOutputs: (Number(p.totalOutputs) || 0) + diffQty,
+            totalEarned: (Number(p.totalEarned) || 0) + diffSale
+          };
+        }
+        return p;
+      });
+
+      // 2. Refrescar datos brutos para limpiar estado
+      await this.fetchAll();
+    }
+    return res;
+  },
   async sync() { await this.fetchAll(); return { success: true }; }
 };
