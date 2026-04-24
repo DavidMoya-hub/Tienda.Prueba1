@@ -18,6 +18,7 @@ const HistoryView: React.FC = () => {
   const [editedDetails, setEditedDetails] = useState<any[]>([]);
   const [editQuantities, setEditQuantities] = useState<Record<string, number>>({});
   const [expandedDebtId, setExpandedDebtId] = useState<string | null>(null);
+  const [expandedDebtId, setExpandedDebtId] = useState<string | null>(null);
   
   // Modal state
   const [modal, setModal] = useState<{

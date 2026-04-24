@@ -75,8 +75,8 @@ const Dashboard: React.FC = () => {
   const envelopes = dataService.getEnvelopes();
   const outputs = dataService.getOutputs();
 
-  const { topVendidos, topGanancias, chartData } = useMemo(() => {
-    const stats: Record<string, { name: string; qty: number; profit: number }> = {};
+  const { topVendidos, topGanancias, chartData, financialKPIs } = useMemo(() => {
+    const stats: Record<string, { name: string; qty: number; profit: number, marginPct: number }> = {};
     const allProducts = dataService.getProducts(); // Catálogo para cruzar nombres y costos
 
     outputs.forEach(out => {
@@ -113,7 +113,12 @@ const Dashboard: React.FC = () => {
         // Ganancia = Venta Total de la partida - (Costo Unitario * Cantidad)
         const gananciaPartida = totalSale > 0 ? totalSale - (costPrice * qty) : 0;
 
-        if (!stats[id]) stats[id] = { name, qty: 0, profit: 0 };
+        if (!stats[id]) {
+          const mPct = (productDef && Number(productDef.salePrice) > 0) 
+            ? ((Number(productDef.salePrice) - Number(productDef.costPrice)) / Number(productDef.salePrice)) * 100 
+            : 0;
+          stats[id] = { name, qty: 0, profit: 0, marginPct: mPct };
+        }
         
         stats[id].qty += qty;
         stats[id].profit += gananciaPartida;
@@ -124,18 +129,25 @@ const Dashboard: React.FC = () => {
     const topVendidos = [...arr].sort((a, b) => b.qty - a.qty).slice(0, 5);
     const topGanancias = [...arr].sort((a, b) => b.profit - a.profit).slice(0, 5);
 
+    // Cálculos de KPIs Financieros basados en Inventario
+    const inventoryCost = products.reduce((sum, p) => sum + (Number(p.stock) > 0 ? Number(p.stock) * Number(p.costPrice) : 0), 0);
+    const inventoryRetail = products.reduce((sum, p) => sum + (Number(p.stock) > 0 ? Number(p.stock) * Number(p.salePrice) : 0), 0);
+    const potentialProfit = inventoryRetail - inventoryCost;
+    const avgMargin = inventoryRetail > 0 ? (potentialProfit / inventoryRetail) * 100 : 0;
+    
+    const financialKPIs = { inventoryCost, inventoryRetail, potentialProfit, avgMargin };
+
     const utilidadReal = closings.reduce((acc, c) => acc + (Number(c.netProfit) || 0), 0);
-    const valorInventario = products.reduce((acc, p) => acc + (Number(p.stock) * Number(p.costPrice)), 0);
     const capitalEnv = envelopes.find(e => e.id === 'ENV4');
     const dineroBoveda = capitalEnv ? Number(capitalEnv.balance) : 0;
-    const capitalReal = valorInventario + dineroBoveda;
+    const capitalReal = inventoryCost + dineroBoveda;
 
     const chartData = [
       { name: 'Capital Real', value: capitalReal },
       { name: 'Utilidad Real', value: utilidadReal }
     ];
 
-    return { topVendidos, topGanancias, chartData };
+    return { topVendidos, topGanancias, chartData, financialKPIs };
   }, [closings, products, envelopes, outputs]);
 
   if (loading) return (
@@ -154,6 +166,51 @@ const Dashboard: React.FC = () => {
           </h2>
           <p className="text-xs md:text-sm text-slate-500 font-medium">Resumen financiero y rendimiento de stock.</p>
         </div>
+      </div>
+
+      {/* FILA DE KPIS FINANCIEROS */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        
+        {/* Valor Inventario (Costo) */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-center">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 font-bold">📦</div>
+            <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Capital en Inventario</span>
+          </div>
+          <span className="text-2xl font-black text-slate-800">${financialKPIs.inventoryCost.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+          <span className="text-xs text-slate-400 font-medium mt-1">Costo total de mercancía en tienda</span>
+        </div>
+
+        {/* Valor Inventario (Venta) */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-center">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 font-bold">🏷️</div>
+            <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Valor de Venta Esperado</span>
+          </div>
+          <span className="text-2xl font-black text-slate-800">${financialKPIs.inventoryRetail.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+          <span className="text-xs text-slate-400 font-medium mt-1">Si se vendiera todo hoy</span>
+        </div>
+
+        {/* Ganancia Potencial */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-center border-l-4 border-l-emerald-500">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 font-bold">💰</div>
+            <span className="text-[11px] font-black text-emerald-600 uppercase tracking-wider">Ganancia Potencial</span>
+          </div>
+          <span className="text-2xl font-black text-emerald-600">${financialKPIs.potentialProfit.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+          <span className="text-xs text-emerald-600/70 font-medium mt-1">Utilidad neta proyectada</span>
+        </div>
+
+        {/* Margen Promedio */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-center">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-8 h-8 rounded-full bg-purple-50 flex items-center justify-center text-purple-600 font-bold">📈</div>
+            <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Margen Promedio</span>
+          </div>
+          <span className="text-2xl font-black text-purple-600">{financialKPIs.avgMargin.toFixed(1)}%</span>
+          <span className="text-xs text-slate-400 font-medium mt-1">Rentabilidad global del negocio</span>
+        </div>
+
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
@@ -277,7 +334,12 @@ const Dashboard: React.FC = () => {
                   topGanancias.map((item, i) => (
                     <div key={i} className="flex justify-between items-center p-3 bg-red-50 hover:bg-red-100 rounded-xl transition-colors">
                       <span className="text-sm font-bold text-slate-700">{item.name}</span>
-                      <span className="text-xs font-black text-red-600 bg-red-100 px-2 py-1 rounded-md">${item.profit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      <div className="flex flex-col items-end">
+                        <span className="text-xs font-black text-red-600 bg-red-100 px-2 py-1 rounded-md mb-1">
+                          ${item.profit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                        <span className="text-[9px] font-bold text-slate-400">Margen: {item.marginPct.toFixed(0)}%</span>
+                      </div>
                     </div>
                   ))
                 }
